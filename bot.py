@@ -514,18 +514,38 @@ def enviar_ultramsg(numero, mensagem):
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.json
+    print("WEBHOOK RECEBIDO:", data)
 
-    mensagem_cliente = data.get("body", "")
-    numero_cliente = data.get("from", "")
+    try:
+        # UltraMsg envia vários eventos, só queremos mensagem recebida
+        if data.get("event_type") != "message_received":
+            return "OK", 200
 
-    if not mensagem_cliente or not numero_cliente:
-        return jsonify({"status": "ignored"})
+        mensagem_data = data.get("data", {})
 
-    resposta = processar_mensagem(mensagem_cliente, numero_cliente)
+        # Ignora mensagens enviadas pelo próprio bot
+        if mensagem_data.get("fromMe") is True:
+            return "OK", 200
 
-    enviar_ultramsg(numero_cliente, resposta)
+        numero = mensagem_data.get("from")
+        texto = mensagem_data.get("body")
 
-    return jsonify({"status": "sent"})
+        if not numero or not texto:
+            return "OK", 200
+
+        # Normaliza número
+        numero = numero.replace("@c.us", "").replace("@s.whatsapp.net", "")
+
+        # Gera resposta usando o motor novo (Ronaldo)
+        resposta = processar_mensagem(texto, numero)
+
+        # Envia resposta pelo UltraMsg
+        enviar_ultramsg(numero, resposta)
+
+    except Exception as e:
+        print("ERRO NO WEBHOOK:", e)
+
+    return "OK", 200
 
 
 if __name__ == "__main__":
