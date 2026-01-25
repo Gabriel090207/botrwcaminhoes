@@ -1,0 +1,96 @@
+.caminhoes-page {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  
+  .caminhoes-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .caminhoes-header h2 {
+    font-size: 18px;
+    font-weight: 600;
+  }
+  
+  .btn-primary {
+    background: linear-gradient(135deg, #1f7a4a, #2e9c66);
+    color: #fff;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  
+  .btn-primary:hover {
+    opacity: 0.9;
+  }
+  
+  .caminhoes-list {
+    background: var(--bg-dark-secondary);
+    border: 1px solid var(--border-dark);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  
+
+  .search-container {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    position: relative;
+    margin: 0 16px;
+  }
+  
+  .search-icon {
+    position: absolute;
+    left: 12px;
+    font-size: 14px;
+    opacity: 0.6;
+  }
+  
+  .search-input {
+    width: 100%;
+    background: var(--bg-dark-secondary);
+    border: 1px solid var(--border-dark);
+    border-radius: 8px;
+    padding: 10px 12px 10px 36px;
+    color: #fff;
+    font-size: 13px;
+  }
+  
+  .search-input::placeholder {
+    color: #aaa;
+  }
+  
+  .search-input:focus {
+    outline: none;
+    border-color: #2e9c66;
+  }
+  
+
+
+  @media (max-width: 768px) {
+    .caminhoes-header {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 12px;
+    }
+  
+    .caminhoes-header h2 {
+      margin-bottom: 4px;
+    }
+  
+    .search-container {
+      margin: 0;
+      width: 100%;
+    }
+  
+    .btn-primary {
+      width: 100%;
+    }
+  }
+  

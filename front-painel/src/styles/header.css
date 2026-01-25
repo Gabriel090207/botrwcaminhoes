@@ -1,0 +1,174 @@
+.header {
+    height: 84px;
+    width: calc(100% - 240px); /* Subtrai a largura da sidebar (240px) */
+    padding: 0 24px;
+    position: fixed;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--header-bg);
+border-bottom: 1px solid var(--header-border);
+
+    top: 0;
+    left: 240px; /* Para alinhar o cabeçalho com a sidebar */
+    z-index: 1000; /* Para garantir que o cabeçalho fique sobre o conteúdo */
+  }
+  
+  @media (max-width: 768px) {
+    .header {
+        width: 100%; /* Cabeçalho ocupará toda a largura */
+        padding: 0 16px; /* Ajuste o padding para telas menores */
+        left: 0; /* Não precisa da margem de 240px, pois a sidebar será acionada via menu */
+    }
+
+    /* Alinha o título à esquerda */
+    .header-left h2 {
+     display: none;
+    }
+
+    .menu-button {
+        display: block;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        font-size: 24px;
+    }
+
+    .header-right {
+        display: none; /* Esconde a seção de usuário no mobile */
+    }
+}
+  
+  .header-left h2 {
+    font-size: 23px;
+    font-weight: 600;
+    color: var(--header-text-strong);
+
+  }
+  
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  
+  /* BOTÃO DE TEMA */
+  .theme-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  
+    background: var(--header-btn-bg);
+border: 1px solid var(--header-btn-border);
+color: var(--text-dark);
+
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 13px;
+  
+    transition: background-color 0.3s ease, color 0.3s ease;
+
+  }
+  
+  .theme-btn:hover {
+    background: var(--header-btn-hover);
+
+  }
+  
+  /* USUÁRIO */
+  .user-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  
+  .avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+  
+    background: linear-gradient(
+      135deg,
+      #1f7a4a,
+      #2e9c66
+    );
+  
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+  }
+  
+  .user-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.1;
+  }
+  
+  .user-text strong {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--header-text-strong);
+  }
+  
+  .user-text span {
+    font-size: 11px;
+    color: var(--header-text-muted);
+
+  }
+  
+
+  .menu-button {
+    background: transparent;
+    border: none;
+    color: var(--text-dark);
+    cursor: pointer;
+    display: none;
+  }
+  
+  /* Mobile */
+  @media (max-width: 768px) {
+    .menu-button {
+      display: block;
+    }
+  
+    .header-title {
+      display: none;
+    }
+  }
+  
+  @media (max-width: 768px) {
+    .header {
+      height: 84px; /* continua alto no mobile */
+      padding: 0 16px;
+    }
+  
+    .menu-button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+  
+      font-size: 22px;
+      margin-right: 10px;
+    }
+  
+    .theme-btn span {
+      display: none; /* só ícone no mobile */
+    }
+  
+    .user-text {
+      display: none; /* esconde nome no mobile */
+    }
+  }
+  
+
+  /* Esconde o header no mobile quando a sidebar estiver aberta */
+@media (max-width: 768px) {
+    body.sidebar-open .header {
+      display: none;
+    }
+  }
+  

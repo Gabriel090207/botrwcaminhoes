@@ -1,0 +1,25 @@
+# Ambiente virtual
+venv/
+.env/
+__pycache__/
+*.pyc
+
+# Logs
+*.log
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# IDE / Editor
+.vscode/
+.idea/
+
+# Firebase (se tiver credenciais locais)
+firebase-key.json
+
+# Render / Build
+.env.production
+.env.local
+
+.env

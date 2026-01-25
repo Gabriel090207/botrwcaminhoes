@@ -1,0 +1,16 @@
+.chart-container {
+    margin-top: 40px;
+    background: var(--chart-bg);
+
+    border: 1px solid var(--border-dark);
+    border-radius: 14px;
+    padding: 40px;
+  }
+  
+  .chart-container h3 {
+    font-size: 15px;
+    font-weight: 500;
+    margin-bottom: 55px;
+    color: var(--text-dark);
+  }
+  

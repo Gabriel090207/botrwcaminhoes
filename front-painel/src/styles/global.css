@@ -1,0 +1,154 @@
+:root {
+  --bg-dark: #121212;
+  --bg-dark-secondary: #1a1a1a;
+  --text-dark: #e5e5e5;
+  --text-muted: #b3b3b3;
+
+  --green-primary: #1f7a4a;
+  --green-secondary: #2e9c66;
+
+  --border-dark: #2a2a2a;
+
+  /* Sidebar */
+  --sidebar-bg: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.95),
+    rgba(0, 0, 0, 0.85)
+  );
+
+  --sidebar-hover: rgba(255, 255, 255, 0.05);
+
+
+    /* Header */
+    --header-bg: linear-gradient(
+      rgba(0, 0, 0, 0.95),
+      rgba(0, 0, 0, 0.85)
+    );
+  
+    --header-border: rgba(255, 255, 255, 0.06);
+  
+    --header-btn-bg: rgba(255, 255, 255, 0.04);
+    --header-btn-border: rgba(255, 255, 255, 0.08);
+    --header-btn-hover: rgba(255, 255, 255, 0.08);
+  
+    --header-text-strong: #ffffff;
+    --header-text-muted: rgba(255, 255, 255, 0.6);
+
+      /* Charts */
+  --chart-bg: linear-gradient(
+    180deg,
+    rgba(46, 156, 102, 0.05),
+    var(--bg-dark-secondary)
+  );
+
+  --chart-grid: rgba(255, 255, 255, 0.06);
+  --chart-axis: rgba(255, 255, 255, 0.4);
+  --chart-axis-muted: rgba(255, 255, 255, 0.2);
+
+  --chart-tooltip-bg: #1a1a1a;
+  --chart-tooltip-border: #2a2a2a;
+  --chart-tooltip-text: #ffffff;
+  --chart-tooltip-label: #aaaaaa;
+
+
+  /* Chat messages */
+--chat-bot-bg: rgba(255, 255, 255, 0.05);
+--chat-bot-text: var(--text-muted);
+
+--chat-admin-bg: rgba(31, 122, 74, 0.25);
+--chat-admin-text: var(--text-dark);
+
+
+}
+
+  
+  /* Tema claro (futuro) */
+  [data-theme="light"] {
+    --bg-dark: #f4f4f4;
+    --bg-dark-secondary: #ffffff;
+    --text-dark: #222222;
+    --text-muted: #555555;
+  
+    --green-primary: #1f7a4a;
+    --green-secondary: #2e9c66;
+  
+    --border-dark: #dddddd;
+  
+    /* Sidebar - modo claro */
+    --sidebar-bg: linear-gradient(
+      180deg,
+      #ffffff,
+      #f1f1f1
+    );
+  
+    --sidebar-hover: rgba(0, 0, 0, 0.06);
+
+
+      /* Header - modo claro */
+  --header-bg: #fff;
+  
+
+  --header-border: rgba(0, 0, 0, 0.08);
+
+  --header-btn-bg: rgba(0, 0, 0, 0.04);
+  --header-btn-border: rgba(0, 0, 0, 0.08);
+  --header-btn-hover: rgba(0, 0, 0, 0.08);
+
+  --header-text-strong: #222222;
+  --header-text-muted: rgba(0, 0, 0, 0.6);
+
+
+    /* Charts - modo claro */
+    --chart-bg: linear-gradient(
+      180deg,
+      rgba(46, 156, 102, 0.08),
+      #ffffff
+    );
+  
+    --chart-grid: rgba(0, 0, 0, 0.06);
+    --chart-axis: rgba(0, 0, 0, 0.4);
+    --chart-axis-muted: rgba(0, 0, 0, 0.25);
+  
+    --chart-tooltip-bg: #ffffff;
+    --chart-tooltip-border: #dddddd;
+    --chart-tooltip-text: #222222;
+    --chart-tooltip-label: #666666;
+
+    /* Chat messages - modo claro */
+--chat-bot-bg: #f2f2f2;
+--chat-bot-text: #333333;
+
+--chat-admin-bg: rgba(31, 122, 74, 0.18);
+--chat-admin-text: #222222;
+
+  
+
+  }
+  
+  
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont,
+      'Segoe UI', Roboto, sans-serif;
+  }
+  
+  * {
+    transition: background-color 0.3s ease, 
+                color 0.3s ease, 
+                border-color 0.3s ease;
+  }
+  
+  body {
+    background-color: var(--bg-dark);
+    color: var(--text-dark);
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+  
+  
+  button {
+    cursor: pointer;
+    border: none;
+  }
+  
