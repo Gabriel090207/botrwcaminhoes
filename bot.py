@@ -34,9 +34,10 @@ AJUSTE_DINAMICO = carregar_prompt()
 load_dotenv()
 
 
-INSTANCE_ID = os.getenv("INSTANCE_ID")
-INSTANCE_TOKEN = os.getenv("INSTANCE_TOKEN")
-CLIENT_TOKEN = os.getenv("CLIENT_TOKEN")
+INSTANCE_ID = os.getenv("ZAPI_INSTANCE_ID")
+INSTANCE_TOKEN = os.getenv("ZAPI_INSTANCE_TOKEN")
+CLIENT_TOKEN = os.getenv("ZAPI_CLIENT_TOKEN")
+
 
 if not all([INSTANCE_ID, INSTANCE_TOKEN, CLIENT_TOKEN]):
     raise Exception("Variáveis da Z-API não configuradas")
