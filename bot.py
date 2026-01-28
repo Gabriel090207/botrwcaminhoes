@@ -16,13 +16,17 @@ import requests
 
 from dashboard_routes import register_dashboard_routes
 
+from flask_cors import CORS
+
 
 
 # Armazena sessões por número do WhatsApp
 SESSOES = {}
 
 app = Flask(__name__)
+CORS(app)
 register_dashboard_routes(app, SESSOES)
+
 
 
 # Link oficial do grupo RW Caminhões
