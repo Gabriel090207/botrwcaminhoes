@@ -701,36 +701,30 @@ def limpar_texto_whatsapp(texto):
     return texto.strip()
 
 
+import re
+
 def normalizar_pontuacao(texto):
-    # Corrige combinações erradas
-    substituicoes = {
-        "!,": "!",
-        ",!": "!",
-        "?.": "?",
-        ".?": "?",
-        "..": ".",
-        ",,": ",",
-        "!!": "!",
-        "??": "?",
-        " ,": ",",
-        " .": ".",
-        " !": "!",
-        " ?": "?"
-    }
+    texto = texto.strip()
 
-    for errado, certo in substituicoes.items():
-        texto = texto.replace(errado, certo)
+    # 1. Remove combinações erradas de pontuação
+    texto = re.sub(r'[.!?,]{2,}', lambda m: m.group(0)[0], texto)
 
-    # Garante espaço após pontuação final
-    texto = texto.replace("!", "! ")
-    texto = texto.replace("?", "? ")
-    texto = texto.replace(". ", ". ")
+    # 2. Corrige casos tipo "opa!," ou "opa!."
+    texto = re.sub(r'([!?])[\.,]', r'\1', texto)
 
-    # Remove espaços duplicados
-    texto = " ".join(texto.split())
+    # 3. Remove vírgula no final da frase
+    texto = re.sub(r',$', '', texto)
+
+    # 4. REMOVE PONTO FINAL NO FIM DA FRASE
+    texto = re.sub(r'\.$', '', texto)
+
+    # 5. Garante espaço correto após ? ou !
+    texto = re.sub(r'([!?])(\S)', r'\1 \2', texto)
+
+    # 6. Remove espaços duplicados
+    texto = re.sub(r'\s{2,}', ' ', texto)
 
     return texto.strip()
-
 
 
 def quebrar_em_mensagens(texto, max_frases=2):

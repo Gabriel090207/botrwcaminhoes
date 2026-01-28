@@ -10,14 +10,14 @@
 }
 
   
-  .sidebar-logo {
-    margin-top: 10px;
-    font-size: 23px;
-    color: var(--green-primary);
-    font-weight: bold;
-    margin-bottom: 30px;
-  }
-  
+.sidebar-logo {
+  margin-top: 10px;
+  font-size: 23px;
+  color: var(--blue-primary);
+  font-weight: bold;
+  margin-bottom: 30px;
+}
+
   .sidebar-logo span {
     display: block;
     font-size: 12px;
@@ -69,8 +69,8 @@
   }
   
   .sidebar-menu .active {
-    background: rgba(31, 122, 74, 0.2);
-    color: var(--green-secondary);
+    background: rgba(31, 143, 255, 0.2);
+    color: var(--blue-secondary);
   }
   
   
