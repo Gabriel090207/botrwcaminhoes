@@ -847,17 +847,17 @@ def webhook():
     print("WEBHOOK RECEBIDO:", data)
 
     try:
-        # Z-API padrão texto
-        numero = data.get("phone")
-        texto = (data.get("text") or {}).get("message")
+        message = data.get("message", {})
 
-        # Se não for mensagem de texto, ignora por enquanto
+        numero = message.get("from")
+        texto = message.get("body")
+
         if not numero or not texto:
+            print("Mensagem ignorada (sem número ou texto)")
             return "OK", 200
 
         resposta = processar_mensagem(texto, numero)
 
-        # Se o bot estiver pausado (retornou None), não envia nada
         if not resposta:
             return "OK", 200
 
@@ -868,6 +868,7 @@ def webhook():
         print("ERRO NO WEBHOOK:", e)
 
     return "OK", 200
+
 
 def verificar_remarketing():
     agora = datetime.now()
