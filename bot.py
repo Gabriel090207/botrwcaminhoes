@@ -18,6 +18,8 @@ from dashboard_routes import register_dashboard_routes
 
 from flask_cors import CORS
 
+import time
+
 
 
 # Armazena sessões por número do WhatsApp
@@ -801,15 +803,18 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido"):
         sessao["pausado_para_gabriel"] = True
 
         sessao["resumo_para_gabriel"].append(
-        f"Nome do cliente: {sessao['nome_cliente']}"
+            f"Nome do cliente: {sessao['nome_cliente']}"
         )
 
-        # RESPOSTA FINAL ÚNICA
+        # 🔔 AVISA O GABRIEL AQUI (ERA ISSO QUE FALTAVA)
+        avisar_gabriel(numero_cliente, sessao)
+
         return [
             f"Beleza, {sessao['nome_cliente']}!",
-            "Já passei tudo pro Gabriel aqui.",
-            "Ele vai entrar em contato contigo pra alinhar certinho."
+            "Já passei tudo pro Gabriel aqui",
+            "Ele vai entrar em contato contigo pra alinhar certinho"
         ]
+
 
     # ===== BLOQUEIO DE VALOR =====
     gatilhos_valor = ["valor", "preço", "quanto", "custa"]
@@ -848,7 +853,11 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido"):
     mensagem = remover_reapresentacao(mensagem)
     mensagem = limpar_texto_whatsapp(mensagem)
     mensagem = normalizar_pontuacao(mensagem)
-    mensagens = quebrar_em_mensagens(mensagem)
+    mensagens = [
+        normalizar_pontuacao(m)
+        for m in quebrar_em_mensagens(mensagem)
+    ]
+
 
 
     if not mensagens:
@@ -991,15 +1000,22 @@ def webhook():
 
         respostas = processar_mensagem(texto, numero)
 
-        if not respostas:
+        # 🔕 Se a conversa foi transferida, nunca mais responder
+        if respostas is None:
             return "OK", 200
+
 
         if isinstance(respostas, str):
             respostas = [respostas]
 
-        for msg in respostas:
+        for i, msg in enumerate(respostas):
             enviar_digitando(numero)
             enviar_mensagem(numero, msg)
+
+            # Delay de 15s entre mensagens
+            if i < len(respostas) - 1:
+                time.sleep(15)
+
 
 
     except Exception as e:
@@ -1016,6 +1032,11 @@ def verificar_remarketing():
     for numero, sessao in SESSOES.items():
         ultima = sessao.get("ultima_mensagem_cliente")
         ja_enviado = sessao.get("remarketing_enviado")
+
+        # Nunca faz remarketing se já foi transferido
+        if sessao.get("pausado_para_gabriel"):
+            continue
+
 
         if not ultima or ja_enviado:
             continue
