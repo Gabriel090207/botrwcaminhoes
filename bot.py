@@ -23,7 +23,7 @@ SESSOES = {}
 
 # Link oficial do grupo RW Caminhões
 GRUPO_LINK = "https://chat.whatsapp.com/F69FL3ligTJGPRAJfKsQaW?mode=gi_t"
-NUMERO_GABRIEL = "554796987146"  # depois colocamos o número real
+NUMERO_GABRIEL = "5547991117146"  # depois colocamos o número real
 
 
 AJUSTE_DINAMICO = carregar_prompt()
@@ -678,16 +678,50 @@ def conversar():
         historico.append({"role": "assistant", "content": mensagem})
 
 
+import re
+
+def limpar_texto_whatsapp(texto):
+    # Remove excesso de vírgulas
+    texto = re.sub(r",\s*,+", ", ", texto)
+    texto = re.sub(r"\s+,", ",", texto)
+
+    # Evita frases longas com várias vírgulas
+    texto = texto.replace(", e ", ". ")
+    texto = texto.replace(", mas ", ". ")
+    texto = texto.replace(", porque ", ". ")
+
+    return texto.strip()
+
+
+def quebrar_em_mensagens(texto, max_frases=2):
+    frases = re.split(r'(?<=[.!?])\s+', texto)
+    mensagens = []
+    bloco = []
+
+    for frase in frases:
+        if not frase:
+            continue
+
+        bloco.append(frase)
+
+        if len(bloco) >= max_frases:
+            mensagens.append(" ".join(bloco).strip())
+            bloco = []
+
+    if bloco:
+        mensagens.append(" ".join(bloco).strip())
+
+    return mensagens
+
+
+
 def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido"):
-    # ===== CRIA SESSÃO =====
     if numero_cliente not in SESSOES:
         ajuste = carregar_prompt()
         system_prompt = PROMPT_BASE + ("\n\nAJUSTE TEMPORÁRIO:\n" + ajuste if ajuste else "")
 
         SESSOES[numero_cliente] = {
-            "historico": [
-                {"role": "system", "content": system_prompt}
-            ],
+            "historico": [{"role": "system", "content": system_prompt}],
             "primeira_resposta": True,
             "ultima_mensagem_cliente": datetime.now(),
             "remarketing_enviado": False,
@@ -699,7 +733,6 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido"):
 
     sessao = SESSOES[numero_cliente]
 
-    # ===== PAUSA TOTAL =====
     if sessao["pausado_para_gabriel"]:
         return None
 
@@ -707,9 +740,7 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido"):
     sessao["remarketing_enviado"] = False
     user_lower = mensagem_cliente.lower()
 
-    # =====================================================
-    # ESTADO 3 – AGUARDANDO NOME (PRIORIDADE ABSOLUTA)
-    # =====================================================
+    # ===== AGUARDANDO NOME =====
     if sessao["aguardando_nome"]:
         sessao["nome_cliente"] = mensagem_cliente.strip().capitalize()
         sessao["aguardando_nome"] = False
@@ -719,18 +750,13 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido"):
             f"Nome do cliente: {sessao['nome_cliente']}"
         )
 
-        mensagem_final = (
-            f"Beleza, {sessao['nome_cliente']}! "
-            "Já passei tudo pro Gabriel aqui. "
+        return [
+            f"Beleza, {sessao['nome_cliente']}!",
+            "Já passei tudo pro Gabriel aqui.",
             "Ele vai entrar em contato contigo pra alinhar certinho."
-        )
+        ]
 
-        avisar_gabriel(numero_cliente, sessao)
-        return mensagem_final
-
-    # =====================================================
-    # ESTADO 2 – BLOQUEIO ABSOLUTO DE VALOR
-    # =====================================================
+    # ===== BLOQUEIO DE VALOR =====
     gatilhos_valor = ["valor", "preço", "quanto", "custa"]
 
     if any(g in user_lower for g in gatilhos_valor):
@@ -739,18 +765,15 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido"):
             f"Interesse em valor: {mensagem_cliente}"
         )
 
-        return (
-            "Patrão, esse caminhão tá em repasse, "
-            "por isso o valor fica bem melhor que o normal.\n\n"
-            "Pra não te passar informação errada, "
-            "eu prefiro alinhar esse valor direto com o Gabriel.\n\n"
-            "Só pra eu te apresentar certinho pra ele, "
-            "qual é teu nome?"
-        )
+        return [
+            "Patrão, esse caminhão tá em repasse.",
+            "Por isso o valor fica bem melhor que o normal.",
+            "Pra não te passar informação errada,",
+            "prefiro alinhar isso direto com o Gabriel.",
+            "Qual é teu nome?"
+        ]
 
-    # =====================================================
-    # ESTADO 1 – CONVERSA NORMAL (GPT)
-    # =====================================================
+    # ===== GPT =====
     historico = sessao["historico"]
     historico.append({"role": "user", "content": mensagem_cliente})
 
@@ -761,30 +784,17 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido"):
     )
 
     mensagem = resposta.choices[0].message.content.strip()
-    mensagem_lower = mensagem.lower()
 
-    # ===== REMOVE SAUDAÇÕES DUPLAS DO GPT =====
-    saudacoes = [
-        "fala", "fala,", "fala!",
-        "opa", "ôpa", "opa!", "ôpa!",
-        "tudo bem", "tudo certo"
-    ]
-
-    for s in saudacoes:
-        if mensagem_lower.startswith(s):
-            mensagem = mensagem.split(" ", 1)[-1].strip().capitalize()
-            break
-
-    # ===== ABERTURA (APENAS UMA VEZ) =====
+    # ===== ABERTURA FORÇADA =====
     if sessao["primeira_resposta"]:
-        saudacao = "Ôpa! Aqui é o Ronaldo, da RW Caminhões. "
-        if "ronaldo" not in mensagem_lower and "rw caminhões" not in mensagem_lower:
-            mensagem = saudacao + mensagem
+        mensagem = "Ôpa! Aqui é o Ronaldo, da RW Caminhões. " + mensagem.lstrip(" ,.-")
         sessao["primeira_resposta"] = False
 
-    historico.append({"role": "assistant", "content": mensagem})
-    return mensagem
+    mensagem = limpar_texto_whatsapp(mensagem)
+    mensagens = quebrar_em_mensagens(mensagem)
 
+    historico.append({"role": "assistant", "content": mensagem})
+    return mensagens
 
 
 def avisar_gabriel(numero_cliente, sessao):
@@ -916,13 +926,18 @@ def webhook():
 
         print(f">> Cliente {numero}: {texto}")
 
-        resposta = processar_mensagem(texto, numero)
+        respostas = processar_mensagem(texto, numero)
 
-        if not resposta:
+        if not respostas:
             return "OK", 200
 
-        enviar_digitando(numero)
-        enviar_mensagem(numero, resposta)
+        if isinstance(respostas, str):
+            respostas = [respostas]
+
+        for msg in respostas:
+            enviar_digitando(numero)
+            enviar_mensagem(numero, msg)
+
 
     except Exception as e:
         import traceback
