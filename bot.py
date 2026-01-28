@@ -33,6 +33,15 @@ AJUSTE_DINAMICO = carregar_prompt()
 # Carrega variáveis do .env
 load_dotenv()
 
+
+INSTANCE_ID = os.getenv("INSTANCE_ID")
+INSTANCE_TOKEN = os.getenv("INSTANCE_TOKEN")
+CLIENT_TOKEN = os.getenv("CLIENT_TOKEN")
+
+if not all([INSTANCE_ID, INSTANCE_TOKEN, CLIENT_TOKEN]):
+    raise Exception("Variáveis da Z-API não configuradas")
+
+
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def gerar_contexto_caminhoes():
@@ -850,10 +859,13 @@ def webhook():
         message = data.get("message", {})
 
         numero = message.get("from")
-        texto = message.get("body")
+        texto = (
+            message.get("body")
+            or message.get("text", {}).get("message")
+        )
 
         if not numero or not texto:
-            print("Mensagem ignorada (sem número ou texto)")
+            print("Mensagem ignorada")
             return "OK", 200
 
         resposta = processar_mensagem(texto, numero)
@@ -868,7 +880,6 @@ def webhook():
         print("ERRO NO WEBHOOK:", e)
 
     return "OK", 200
-
 
 def verificar_remarketing():
     agora = datetime.now()
