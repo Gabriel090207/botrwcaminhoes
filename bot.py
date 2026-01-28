@@ -701,6 +701,38 @@ def limpar_texto_whatsapp(texto):
     return texto.strip()
 
 
+def normalizar_pontuacao(texto):
+    # Corrige combinações erradas
+    substituicoes = {
+        "!,": "!",
+        ",!": "!",
+        "?.": "?",
+        ".?": "?",
+        "..": ".",
+        ",,": ",",
+        "!!": "!",
+        "??": "?",
+        " ,": ",",
+        " .": ".",
+        " !": "!",
+        " ?": "?"
+    }
+
+    for errado, certo in substituicoes.items():
+        texto = texto.replace(errado, certo)
+
+    # Garante espaço após pontuação final
+    texto = texto.replace("!", "! ")
+    texto = texto.replace("?", "? ")
+    texto = texto.replace(". ", ". ")
+
+    # Remove espaços duplicados
+    texto = " ".join(texto.split())
+
+    return texto.strip()
+
+
+
 def quebrar_em_mensagens(texto, max_frases=2):
     frases = re.split(r'(?<=[.!?])\s+', texto)
     mensagens = []
@@ -775,9 +807,10 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido"):
         sessao["pausado_para_gabriel"] = True
 
         sessao["resumo_para_gabriel"].append(
-            f"Nome do cliente: {sessao['nome_cliente']}"
+        f"Nome do cliente: {sessao['nome_cliente']}"
         )
 
+        # RESPOSTA FINAL ÚNICA
         return [
             f"Beleza, {sessao['nome_cliente']}!",
             "Já passei tudo pro Gabriel aqui.",
@@ -820,7 +853,9 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido"):
 
     mensagem = remover_reapresentacao(mensagem)
     mensagem = limpar_texto_whatsapp(mensagem)
+    mensagem = normalizar_pontuacao(mensagem)
     mensagens = quebrar_em_mensagens(mensagem)
+
 
     if not mensagens:
         mensagens = ["Tudo certo por aí?"]
