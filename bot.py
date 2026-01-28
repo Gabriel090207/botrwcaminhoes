@@ -1014,7 +1014,7 @@ def webhook():
 
             # Delay de 15s entre mensagens
             if i < len(respostas) - 1:
-                time.sleep(15)
+                time.sleep(5)
 
 
 
