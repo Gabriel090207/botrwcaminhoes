@@ -14,9 +14,13 @@ from datetime import datetime, timedelta
 
 import requests
 
+from dashboard_routes import register_dashboard_routes
+
 
 
 app = Flask(__name__)
+register_dashboard_routes(app)
+
 
 # Armazena sessões por número do WhatsApp
 SESSOES = {}
