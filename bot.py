@@ -719,24 +719,24 @@ def quebrar_em_mensagens(texto, max_frases=2):
 
 
 def remover_reapresentacao(texto):
-    bloqueios = [
+    substituicoes = [
+        "sou o ronaldo, do atendimento da rw caminhões",
+        "sou o ronaldo do atendimento da rw caminhões",
         "sou o ronaldo",
         "aqui é o ronaldo",
         "ronaldo, da rw caminhões",
-        "do atendimento da rw caminhões",
         "da rw caminhões"
     ]
 
-    linhas = texto.split("\n")
-    linhas_filtradas = []
+    texto_lower = texto.lower()
 
-    for linha in linhas:
-        linha_lower = linha.lower()
-        if any(b in linha_lower for b in bloqueios):
-            continue
-        linhas_filtradas.append(linha)
+    for s in substituicoes:
+        if s in texto_lower:
+            idx = texto_lower.find(s)
+            texto = texto[:idx] + texto[idx + len(s):]
+            texto_lower = texto.lower()
 
-    return " ".join(linhas_filtradas).strip()
+    return texto.strip(" ,.-\n")
 
 
 def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido"):
@@ -817,6 +817,10 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido"):
     mensagem = remover_reapresentacao(mensagem)
     mensagem = limpar_texto_whatsapp(mensagem)
     mensagens = quebrar_em_mensagens(mensagem)
+
+    if not mensagens:
+        mensagens = ["Tudo certo por aí?"]
+
 
 
     historico.append({"role": "assistant", "content": mensagem})
