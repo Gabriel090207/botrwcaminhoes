@@ -738,7 +738,6 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido"):
             "qual é teu nome?"
         )
 
-
     # =====================================================
     # ESTADO 1 – CONVERSA NORMAL (GPT)
     # =====================================================
@@ -754,7 +753,19 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido"):
     mensagem = resposta.choices[0].message.content.strip()
     mensagem_lower = mensagem.lower()
 
-    # ===== ABERTURA =====
+    # ===== REMOVE SAUDAÇÕES DUPLAS DO GPT =====
+    saudacoes = [
+        "fala", "fala,", "fala!",
+        "opa", "ôpa", "opa!", "ôpa!",
+        "tudo bem", "tudo certo"
+    ]
+
+    for s in saudacoes:
+        if mensagem_lower.startswith(s):
+            mensagem = mensagem.split(" ", 1)[-1].strip().capitalize()
+            break
+
+    # ===== ABERTURA (APENAS UMA VEZ) =====
     if sessao["primeira_resposta"]:
         saudacao = "Ôpa! Aqui é o Ronaldo, da RW Caminhões. "
         if "ronaldo" not in mensagem_lower and "rw caminhões" not in mensagem_lower:
