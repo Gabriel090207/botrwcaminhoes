@@ -892,16 +892,9 @@ def verificar_remarketing():
 
 
 if __name__ == "__main__":
-    print("Bot RW Caminhões iniciado. Digite 'sair' para encerrar.\n")
+    print("Bot RW Caminhões iniciado (modo servidor)")
 
-    while True:
-        texto = input("Cliente: ")
-        if texto.lower() == "sair":
-            break
-
-        resposta = processar_mensagem(texto, "teste_local")
-
-        if resposta:
-            print(f"Ronaldo: {resposta}\n")
-
-
+    app.run(
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 10000))
+    )
