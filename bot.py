@@ -861,17 +861,14 @@ def webhook():
     try:
         msg_id = data.get("messageId")
 
-        # Ignora mensagens sem ID
         if not msg_id:
             return "OK", 200
 
-        # Evita duplicação
         if msg_id in ULTIMAS_MENSAGENS:
             return "OK", 200
 
         ULTIMAS_MENSAGENS.append(msg_id)
 
-        # Só mensagens recebidas
         if data.get("type") != "ReceivedCallback":
             return "OK", 200
 
@@ -880,9 +877,9 @@ def webhook():
 
         numero = data.get("phone")
 
-        # ========= CAPTURA DE TEXTO =========
         texto = None
 
+        # ========= TEXTO =========
         if isinstance(data.get("text"), dict):
             texto = data.get("text", {}).get("message")
         elif isinstance(data.get("text"), str):
@@ -891,8 +888,30 @@ def webhook():
         if not texto:
             texto = data.get("body") or data.get("message") or data.get("caption")
 
-        if not numero or not texto:
-            print("Mensagem ignorada (sem texto ou número)")
+        # ========= ÁUDIO =========
+        if not texto and data.get("audio"):
+            audio_url = data.get("audio", {}).get("audioUrl")
+
+            if audio_url:
+                try:
+                    audio_path = f"/tmp/{msg_id}.ogg"
+                    r = requests.get(audio_url, timeout=10)
+
+                    with open(audio_path, "wb") as f:
+                        f.write(r.content)
+
+                    texto = transcrever_audio(audio_path)
+
+                except Exception as e:
+                    print("Erro ao baixar/transcrever áudio:", e)
+
+        # ========= FALLBACK DE ÁUDIO =========
+        if not texto:
+            enviar_mensagem(
+                numero,
+                "Patrão, não consegui entender muito bem o áudio. "
+                "Se puder, me manda de novo ou escreve aqui rapidinho."
+            )
             return "OK", 200
 
         print(f">> Cliente {numero}: {texto}")
