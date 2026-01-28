@@ -28,3 +28,25 @@ def register_dashboard_routes(app, sessoes):
             "transferidas": transferidas,
             "statusBot": "Ativo"
         })
+
+
+    # 🔥 NOVO ENDPOINT DO GRÁFICO
+    @app.route("/dashboard/conversas-hora", methods=["GET"])
+    def conversas_por_hora():
+        hoje = date.today()
+        por_hora = {}
+
+        for sessao in sessoes.values():
+            ultima = sessao.get("ultima_mensagem_cliente")
+
+            if ultima and ultima.date() == hoje:
+                hora = ultima.strftime("%Hh")
+                por_hora[hora] = por_hora.get(hora, 0) + 1
+
+        # ordena por hora
+        resultado = [
+            {"hora": h, "conversas": por_hora[h]}
+            for h in sorted(por_hora.keys())
+        ]
+
+        return jsonify(resultado)

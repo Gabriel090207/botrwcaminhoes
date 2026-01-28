@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import {
   AreaChart,
   Area,
@@ -9,25 +10,43 @@ import {
 } from 'recharts'
 import '../styles/conversas-chart.css'
 
-const data = [
-  { hora: '06h', conversas: 2 },
-  { hora: '08h', conversas: 5 },
-  { hora: '10h', conversas: 12 },
-  { hora: '12h', conversas: 18 },
-  { hora: '14h', conversas: 14 },
-  { hora: '16h', conversas: 9 },
-  { hora: '18h', conversas: 6 },
-  { hora: '20h', conversas: 3 },
-]
+interface ConversaHora {
+  hora: string
+  conversas: number
+}
 
 export function ConversasChart() {
+  const [data, setData] = useState<ConversaHora[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch('https://botrwcaminhoes.onrender.com/dashboard/conversas-hora')
+      .then(res => res.json())
+      .then(dados => {
+        setData(dados)
+        setLoading(false)
+      })
+      .catch(err => {
+        console.error('Erro ao carregar gráfico', err)
+        setLoading(false)
+      })
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="chart-container">
+        <h3>Pico de conversas por horário</h3>
+        <p>Carregando gráfico...</p>
+      </div>
+    )
+  }
+
   return (
     <div className="chart-container">
       <h3>Pico de conversas por horário</h3>
 
       <ResponsiveContainer width="100%" height={420}>
         <AreaChart data={data}>
-          {/* Gradiente azul */}
           <defs>
             <linearGradient id="blueGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="var(--blue-secondary)" stopOpacity={0.6} />
@@ -35,31 +54,22 @@ export function ConversasChart() {
             </linearGradient>
           </defs>
 
-          {/* Grid sutil */}
-          <CartesianGrid
-            stroke="var(--chart-grid)"
-            vertical={false}
-          />
+          <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
 
-          {/* Eixo X */}
           <XAxis
             dataKey="hora"
             stroke="var(--chart-axis)"
             tickLine={false}
             axisLine={false}
-            padding={{ left: 15, right: 0 }}
           />
 
-          {/* Eixo Y */}
           <YAxis
             stroke="var(--chart-axis-muted)"
             tickLine={false}
             axisLine={false}
             width={30}
-            tickMargin={6}
           />
 
-          {/* Tooltip */}
           <Tooltip
             contentStyle={{
               backgroundColor: 'var(--chart-tooltip-bg)',
@@ -68,10 +78,8 @@ export function ConversasChart() {
               color: 'var(--chart-tooltip-text)',
               fontSize: '13px',
             }}
-            labelStyle={{ color: 'var(--chart-tooltip-label)' }}
           />
 
-          {/* Área + linha */}
           <Area
             type="monotone"
             dataKey="conversas"
