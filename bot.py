@@ -19,7 +19,8 @@ from dashboard_routes import register_dashboard_routes
 
 
 app = Flask(__name__)
-register_dashboard_routes(app)
+register_dashboard_routes(app, SESSOES)
+
 
 
 # Armazena sessões por número do WhatsApp

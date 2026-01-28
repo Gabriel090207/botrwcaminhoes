@@ -1,8 +1,7 @@
 from flask import jsonify
 from datetime import date
-from bot import SESSOES  # importa o estado global do bot
 
-def register_dashboard_routes(app):
+def register_dashboard_routes(app, sessoes):
 
     @app.route("/dashboard", methods=["GET"])
     def dashboard():
@@ -12,7 +11,7 @@ def register_dashboard_routes(app):
         em_andamento = 0
         transferidas = 0
 
-        for sessao in SESSOES.values():
+        for sessao in sessoes.values():
             ultima = sessao.get("ultima_mensagem_cliente")
 
             if ultima and ultima.date() == hoje:
