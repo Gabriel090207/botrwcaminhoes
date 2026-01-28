@@ -718,6 +718,26 @@ def quebrar_em_mensagens(texto, max_frases=2):
     return mensagens
 
 
+def remover_reapresentacao(texto):
+    bloqueios = [
+        "sou o ronaldo",
+        "aqui é o ronaldo",
+        "ronaldo, da rw caminhões",
+        "do atendimento da rw caminhões",
+        "da rw caminhões"
+    ]
+
+    linhas = texto.split("\n")
+    linhas_filtradas = []
+
+    for linha in linhas:
+        linha_lower = linha.lower()
+        if any(b in linha_lower for b in bloqueios):
+            continue
+        linhas_filtradas.append(linha)
+
+    return " ".join(linhas_filtradas).strip()
+
 
 def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido"):
     if numero_cliente not in SESSOES:
@@ -794,8 +814,10 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido"):
         mensagem = "Ôpa! Aqui é o Ronaldo, da RW Caminhões. " + mensagem.lstrip(" ,.-")
         sessao["primeira_resposta"] = False
 
+    mensagem = remover_reapresentacao(mensagem)
     mensagem = limpar_texto_whatsapp(mensagem)
     mensagens = quebrar_em_mensagens(mensagem)
+
 
     historico.append({"role": "assistant", "content": mensagem})
     return mensagens
