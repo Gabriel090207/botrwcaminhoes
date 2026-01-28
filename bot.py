@@ -851,23 +851,51 @@ def transcrever_audio(caminho_audio):
         return None
 
 
+ULTIMAS_MENSAGENS = []
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.json
     print("WEBHOOK RECEBIDO:", data)
 
     try:
-        message = data.get("message", {})
+        msg_id = data.get("messageId")
 
-        numero = message.get("from")
-        texto = (
-            message.get("body")
-            or message.get("text", {}).get("message")
-        )
+        # Ignora mensagens sem ID
+        if not msg_id:
+            return "OK", 200
+
+        # Evita duplicação
+        if msg_id in ULTIMAS_MENSAGENS:
+            return "OK", 200
+
+        ULTIMAS_MENSAGENS.append(msg_id)
+
+        # Só mensagens recebidas
+        if data.get("type") != "ReceivedCallback":
+            return "OK", 200
+
+        if data.get("fromMe") is True:
+            return "OK", 200
+
+        numero = data.get("phone")
+
+        # ========= CAPTURA DE TEXTO =========
+        texto = None
+
+        if isinstance(data.get("text"), dict):
+            texto = data.get("text", {}).get("message")
+        elif isinstance(data.get("text"), str):
+            texto = data.get("text")
+
+        if not texto:
+            texto = data.get("body") or data.get("message") or data.get("caption")
 
         if not numero or not texto:
-            print("Mensagem ignorada")
+            print("Mensagem ignorada (sem texto ou número)")
             return "OK", 200
+
+        print(f">> Cliente {numero}: {texto}")
 
         resposta = processar_mensagem(texto, numero)
 
@@ -878,9 +906,12 @@ def webhook():
         enviar_mensagem(numero, resposta)
 
     except Exception as e:
+        import traceback
         print("ERRO NO WEBHOOK:", e)
+        traceback.print_exc()
 
     return "OK", 200
+
 
 def verificar_remarketing():
     agora = datetime.now()
