@@ -23,7 +23,14 @@ export function ConversasChart() {
     fetch('https://botrwcaminhoes.onrender.com/dashboard/conversas-hora')
       .then(res => res.json())
       .then(dados => {
-        setData(dados)
+        const normalizado = dados
+          .map((item: any) => ({
+            hora: item.hora,
+            conversas: Number(item.conversas),
+          }))
+          .sort((a: any, b: any) => Number(a.hora) - Number(b.hora))
+
+        setData(normalizado)
         setLoading(false)
       })
       .catch(err => {
@@ -56,6 +63,7 @@ export function ConversasChart() {
 
           <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
 
+          {/* EIXO X → HORÁRIO */}
           <XAxis
             dataKey="hora"
             stroke="var(--chart-axis)"
@@ -63,22 +71,27 @@ export function ConversasChart() {
             axisLine={false}
           />
 
+          {/* EIXO Y → QUANTIDADE */}
           <YAxis
             stroke="var(--chart-axis-muted)"
             tickLine={false}
             axisLine={false}
-            width={30}
+            allowDecimals={false}
+            width={35}
           />
 
           <Tooltip
-            contentStyle={{
-              backgroundColor: 'var(--chart-tooltip-bg)',
-              border: '1px solid var(--chart-tooltip-border)',
-              borderRadius: '8px',
-              color: 'var(--chart-tooltip-text)',
-              fontSize: '13px',
-            }}
-          />
+  formatter={(value) => [`${value} conversas`, '']}
+  labelFormatter={(label) => `Horário: ${label}h`}
+  contentStyle={{
+    backgroundColor: 'var(--chart-tooltip-bg)',
+    border: '1px solid var(--chart-tooltip-border)',
+    borderRadius: '8px',
+    color: 'var(--chart-tooltip-text)',
+    fontSize: '13px',
+  }}
+/>
+
 
           <Area
             type="monotone"

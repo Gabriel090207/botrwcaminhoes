@@ -1,52 +1,96 @@
 from flask import jsonify
-from datetime import date
+from datetime import datetime, date
+from firebase_admin import firestore
+
+db = firestore.client()
+
+
+def _estrutura_horas():
+    return {f"{h:02d}": 0 for h in range(24)}
+
+
+def _garantir_documento_dia():
+    hoje = date.today().isoformat()
+    ref = db.collection("dashboard_conversas").document(hoje)
+    doc = ref.get()
+
+    if not doc.exists:
+        ref.set({
+            "data": hoje,
+            "total": 0,
+            "porHora": _estrutura_horas(),
+            "atualizadoEm": firestore.SERVER_TIMESTAMP
+        })
+
+    return ref
+
+
+def registrar_conversa_dashboard():
+    agora = datetime.now()
+    hora = agora.strftime("%H")
+
+    ref = _garantir_documento_dia()
+    doc = ref.get().to_dict()
+
+    por_hora = doc.get("porHora", _estrutura_horas())
+    por_hora[hora] = por_hora.get(hora, 0) + 1
+
+    ref.update({
+        "total": doc.get("total", 0) + 1,
+        "porHora": por_hora,
+        "atualizadoEm": firestore.SERVER_TIMESTAMP
+    })
+
 
 def register_dashboard_routes(app, sessoes):
 
+    # ===============================
+    # DASHBOARD - CARDS
+    # ===============================
     @app.route("/dashboard", methods=["GET"])
     def dashboard():
-        hoje = date.today()
+        hoje = date.today().isoformat()
+        ref = db.collection("dashboard_conversas").document(hoje)
+        doc = ref.get()
 
-        conversas_hoje = 0
-        em_andamento = 0
-        transferidas = 0
-
-        for sessao in sessoes.values():
-            ultima = sessao.get("ultima_mensagem_cliente")
-
-            if ultima and ultima.date() == hoje:
-                conversas_hoje += 1
-
-            if sessao.get("pausado_para_gabriel"):
-                transferidas += 1
-            else:
-                em_andamento += 1
+        if not doc.exists:
+            dados = {
+                "total": 0
+            }
+        else:
+            dados = doc.to_dict()
 
         return jsonify({
-            "conversasHoje": conversas_hoje,
-            "emAndamento": em_andamento,
-            "transferidas": transferidas,
+            "conversasHoje": dados.get("total", 0),
+            "emAndamento": len([
+                s for s in sessoes.values()
+                if not s.get("pausado_para_gabriel")
+            ]),
+            "transferidas": len([
+                s for s in sessoes.values()
+                if s.get("pausado_para_gabriel")
+            ]),
             "statusBot": "Ativo"
         })
 
 
-    # 🔥 NOVO ENDPOINT DO GRÁFICO
+    # ===============================
+    # DASHBOARD - GRÁFICO POR HORA
+    # ===============================
     @app.route("/dashboard/conversas-hora", methods=["GET"])
     def conversas_por_hora():
-        hoje = date.today()
-        por_hora = {}
+        hoje = date.today().isoformat()
+        ref = db.collection("dashboard_conversas").document(hoje)
+        doc = ref.get()
 
-        for sessao in sessoes.values():
-            ultima = sessao.get("ultima_mensagem_cliente")
+        horas = _estrutura_horas()
 
-            if ultima and ultima.date() == hoje:
-                hora = ultima.strftime("%Hh")
-                por_hora[hora] = por_hora.get(hora, 0) + 1
+        if doc.exists:
+            horas.update(doc.to_dict().get("porHora", {}))
 
-        # ordena por hora
         resultado = [
-            {"hora": h, "conversas": por_hora[h]}
-            for h in sorted(por_hora.keys())
+            {"hora": h, "conversas": horas[h]}
+            for h in sorted(horas.keys())
         ]
 
         return jsonify(resultado)
