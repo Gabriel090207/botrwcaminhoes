@@ -18,13 +18,12 @@ from dashboard_routes import register_dashboard_routes
 
 
 
+# Armazena sessões por número do WhatsApp
+SESSOES = {}
+
 app = Flask(__name__)
 register_dashboard_routes(app, SESSOES)
 
-
-
-# Armazena sessões por número do WhatsApp
-SESSOES = {}
 
 # Link oficial do grupo RW Caminhões
 GRUPO_LINK = "https://chat.whatsapp.com/F69FL3ligTJGPRAJfKsQaW?mode=gi_t"
