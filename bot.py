@@ -778,40 +778,54 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido"):
 
 
 def avisar_gabriel(numero_cliente, sessao):
+    nome = sessao.get("nome_cliente") or "Não informado"
+
+    resumo = "\n".join([f"- {msg}" for msg in sessao.get("resumo_para_gabriel", [])])
+    if not resumo:
+        resumo = "- (sem resumo)"
+
+    texto_gabriel = (
+        "🔔 *NOVO LEAD (TRANSFERIDO)*\n\n"
+        f"📞 *Telefone:* {numero_cliente}\n"
+        f"👤 *Nome:* {nome}\n\n"
+        f"📝 *Resumo:*\n{resumo}\n\n"
+        "✅ Bot pausado para esse cliente."
+    )
+
+    # Envia para o WhatsApp do Gabriel
+    try:
+        enviar_mensagem(NUMERO_GABRIEL, texto_gabriel)
+    except Exception as e:
+        print("Erro ao avisar Gabriel:", e)
+
+    # Log local (continua ajudando no debug)
     print("\n🔔 REPASSE PARA O GABRIEL")
     print("Telefone:", numero_cliente)
-    print("Nome:", sessao.get("nome_cliente") or "Não informado")
+    print("Nome:", nome)
     print("Resumo do interesse:")
-
-    for msg in sessao["resumo_para_gabriel"]:
+    for msg in sessao.get("resumo_para_gabriel", []):
         print("-", msg)
-
     print("🔕 Bot pausado para este cliente\n")
 
 
 
-
-def enviar_ultramsg(numero, mensagem):
-    instance_id = os.getenv("ULTRAMSG_INSTANCE_ID")
-    token = os.getenv("ULTRAMSG_TOKEN")
-
-    url = f"https://api.ultramsg.com/{instance_id}/messages/chat"
-
-    payload = {
-        "token": token,
-        "to": numero,
-        "body": mensagem
-    }
-
-    headers = {
-        "Content-Type": "application/x-www-form-urlencoded"
-    }
-
+def enviar_digitando(numero):
     try:
-        requests.post(url, data=payload, headers=headers, timeout=10)
-    except Exception as e:
-        print("Erro ao enviar UltraMsg:", e)
+        url = f"https://api.z-api.io/instances/{INSTANCE_ID}/token/{INSTANCE_TOKEN}/send-status-typing"
+        headers = {"Client-Token": CLIENT_TOKEN}
+        requests.post(url, headers=headers, timeout=5)
+    except:
+        pass
 
+
+def enviar_mensagem(numero, texto):
+    url = f"https://api.z-api.io/instances/{INSTANCE_ID}/token/{INSTANCE_TOKEN}/send-text"
+    headers = {
+        "Client-Token": CLIENT_TOKEN,
+        "Content-Type": "application/json"
+    }
+    payload = {"phone": numero, "message": texto}
+    requests.post(url, json=payload, headers=headers, timeout=10)
 
 
 def transcrever_audio(caminho_audio):
@@ -833,36 +847,27 @@ def webhook():
     print("WEBHOOK RECEBIDO:", data)
 
     try:
-        # UltraMsg envia vários eventos, só queremos mensagem recebida
-        if data.get("event_type") != "message_received":
-            return "OK", 200
+        # Z-API padrão texto
+        numero = data.get("phone")
+        texto = (data.get("text") or {}).get("message")
 
-        mensagem_data = data.get("data", {})
-
-        # Ignora mensagens enviadas pelo próprio bot
-        if mensagem_data.get("fromMe") is True:
-            return "OK", 200
-
-        numero = mensagem_data.get("from")
-        texto = mensagem_data.get("body")
-
+        # Se não for mensagem de texto, ignora por enquanto
         if not numero or not texto:
             return "OK", 200
 
-        # Normaliza número
-        numero = numero.replace("@c.us", "").replace("@s.whatsapp.net", "")
-
-        # Gera resposta usando o motor novo (Ronaldo)
         resposta = processar_mensagem(texto, numero)
 
-        # Envia resposta pelo UltraMsg
-        enviar_ultramsg(numero, resposta)
+        # Se o bot estiver pausado (retornou None), não envia nada
+        if not resposta:
+            return "OK", 200
+
+        enviar_digitando(numero)
+        enviar_mensagem(numero, resposta)
 
     except Exception as e:
         print("ERRO NO WEBHOOK:", e)
 
     return "OK", 200
-
 
 def verificar_remarketing():
     agora = datetime.now()
@@ -880,7 +885,7 @@ def verificar_remarketing():
                 "Se ficou alguma dúvida ou quiser negociar, é só me chamar."
             )
 
-            enviar_ultramsg(numero, mensagem)
+            enviar_mensagem(numero, mensagem)
             sessao["remarketing_enviado"] = True
 
 
