@@ -994,7 +994,7 @@ MAPA_TRACAO = {
 
 
 def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido", data=None):
-    user_lower = mensagem_cliente.lower()
+    user_lower = mensagem_cliente.lower().strip()
 
     # =====================================================
     # CRIA SESSÃO
@@ -1024,12 +1024,10 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido", data=Non
     sessao["remarketing_enviado"] = False
 
     # =====================================================
-    # DETECTA SAUDAÇÃO
+    # DETECTA SAUDAÇÃO DO CLIENTE
     # =====================================================
     cliente_saudou = any(
-        s in user_lower for s in [
-            "bom dia", "boa tarde", "boa noite", "opa", "fala", "e ai", "e aí", "oi", "olá"
-        ]
+        s in user_lower for s in ["bom dia", "boa tarde", "boa noite", "opa", "fala", "oi", "olá"]
     )
 
     def aplicar_saudacao(texto):
@@ -1041,67 +1039,33 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido", data=Non
             if cliente_saudou:
                 return texto
 
-            saudacao = "Fala, tudo bem? Aqui é o Ronaldo, da RW Caminhões."
-            while texto and texto[0] in [",", ".", "!", " "]:
-                texto = texto[1:].lstrip()
-
-            return f"{saudacao} {texto}" if texto else saudacao
+            return f"Fala, tudo bem? Aqui é o Ronaldo, da RW Caminhões. {texto}".strip()
 
         return texto
 
     # =====================================================
-    # IDENTIFICA CAMINHÃO EM FOCO
+    # IDENTIFICA CAMINHÃO EM FOCO (ANTES DE QUALQUER RESPOSTA)
     # =====================================================
     if not sessao["caminhao_em_foco"]:
         caminhao = identificar_caminhao_por_texto(mensagem_cliente)
         if caminhao:
             sessao["caminhao_em_foco"] = caminhao
 
-    # =====================================================
-    # TOCO / TRUCK / TRAÇADO
-    # =====================================================
-    for palavra, tracao in MAPA_TRACAO.items():
-        if palavra in user_lower:
-            caminhao = sessao.get("caminhao_em_foco")
-
-            if caminhao:
-                if caminhao.get("tracao") == tracao:
-                    return aplicar_saudacao(
-                        f"Tenho sim, patrão. Esse é {tracao}, bem alinhado pra proposta de repasse"
-                    )
-
-                return aplicar_saudacao(
-                    f"Esse específico não é {palavra}, mas sempre entra opção assim. "
-                    "Vou te mandar o link do meu grupo pra acompanhar"
-                )
-
-            opcoes = filtrar_caminhoes_por_tracao(tracao)
-
-            if opcoes:
-                return aplicar_saudacao(
-                    f"Tenho sim, patrão. Hoje tenho: {', '.join(opcoes)}"
-                )
-
-            return aplicar_saudacao(
-                f"No momento não tenho {palavra} disponível, "
-                "mas sempre entra coisa boa. Vou te mandar o link do meu grupo pra acompanhar"
-            )
+    caminhao = sessao.get("caminhao_em_foco")
 
     # =====================================================
-    # PEDIDO DE FOTOS
+    # PEDIDO DE FOTOS (PRIORIDADE ABSOLUTA)
     # =====================================================
     if any(p in user_lower for p in ["foto", "fotos", "imagem", "imagens"]):
-        caminhao = sessao.get("caminhao_em_foco")
+        if caminhao and caminhao.get("imagens"):
+            enviar_imagens_caminhao(
+                numero_cliente,
+                caminhao["imagens"],
+                limite=3
+            )
+            return aplicar_saudacao("Com certeza, patrão. Já te mando as fotos")
 
         if caminhao:
-            if caminhao.get("imagens"):
-                enviar_imagens_caminhao(
-                    numero_cliente,
-                    caminhao["imagens"],
-                    limite=3
-                )
-                return aplicar_saudacao("Com certeza, patrão. Já te mando as fotos")
-
             return aplicar_saudacao(
                 "Consigo sim, patrão. Só estou conferindo as fotos certinho e já te mando"
             )
@@ -1111,11 +1075,9 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido", data=Non
         )
 
     # =====================================================
-    # VALOR
+    # VALOR (RESPONDE DIRETO SE EXISTIR)
     # =====================================================
     if any(v in user_lower for v in ["valor", "preço", "quanto", "custa"]):
-        caminhao = sessao.get("caminhao_em_foco")
-
         if caminhao and caminhao.get("valor"):
             return aplicar_saudacao(
                 f"Esse tá por R$ {caminhao['valor']}. Caminhão de repasse direto, sem maquiagem"
