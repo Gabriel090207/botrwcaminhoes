@@ -486,7 +486,7 @@ REGRAS OBRIGATÓRIAS:
   em uma única linha, separados por vírgula.
 
 LISTA FECHADA (NÃO INTERPRETAR):
-{gerar_contexto_caminhoes()}
+{gerar_contexto_caminhoes_prompt()}
 
 TROCA / BRICK / PERMUTA (REGRA DE ENTENDIMENTO):
 
@@ -496,16 +496,44 @@ Considere como a MESMA coisa:
 - permuta
 - pegar outro no negócio
 
-Se o cliente perguntar sobre troca, responda sempre com clareza e educação.
+REGRA ABSOLUTA:
+- Esses caminhões são SOMENTE para venda
+- Não aceita troca nesses casos
+
+Forma correta de responder (OBRIGATÓRIA):
+- Nunca dizer só “não”
+- Nunca ser seco
+- Nunca parecer robô
 
 Modelo de resposta:
 "Patrão, nesses caminhões eu não consigo pegar troca não, são só pra venda.
 São caminhões de concessionária, transportadora ou cliente final que já tá trocando por outro.
 Às vezes aparece algum que aceita troca, por isso vou te mandar o link do meu grupo pra acompanhar."
 
-Nunca diga apenas "não".
-Sempre explique o motivo.
-Sempre ofereça o grupo como alternativa.
+Sempre:
+- explicar o motivo
+- manter tom humano
+- oferecer o grupo como alternativa
+
+
+REGRA CRÍTICA – NOME DO CLIENTE (OBRIGATÓRIA):
+
+Antes de qualquer transferência para o Gabriel,
+SEMPRE perguntar o nome do cliente.
+
+Fluxo obrigatório:
+1. Cliente demonstra interesse real (comprar, negociar, ver pessoalmente, financiar)
+2. Se o nome ainda NÃO foi informado
+3. Perguntar de forma natural:
+
+Exemplo:
+"Perfeito, patrão. Só pra eu te apresentar certinho pro Gabriel, qual é teu nome?"
+
+Somente APÓS o cliente informar o nome:
+- confirmar que é repasse
+- agradecer
+- avisar que o Gabriel vai entrar em contato
+
 
 CAMINHÃO JÁ VENDIDO:
 
@@ -817,6 +845,348 @@ IMPORTANTE:
 """
 else:
     SYSTEM_PROMPT = PROMPT_BASE
+
+
+
+import re
+
+def limpar_resposta_whatsapp(texto: str) -> str:
+    if not texto:
+        return texto
+
+    t = texto.strip()
+
+    # Remove combinações erradas tipo "!.," ",." "!!"
+    t = re.sub(r'([!?.,]){2,}', r'\1', t)
+
+    # Remove espaço antes de pontuação
+    t = re.sub(r'\s+([!?.,])', r'\1', t)
+
+    # Remove vírgula ou ponto no FINAL
+    t = re.sub(r'[.,]\s*$', '', t)
+
+    # Corrige "Ôpa, ." ou ", ." etc
+    t = t.replace(", .", ".")
+    t = t.replace(" ,", ",")
+    t = t.replace(" .", ".")
+
+    # Evita saudação solta tipo "Ôpa, ."
+    t = re.sub(r'^(ôpa|opa|fala|e aí)[,.\s]+', r'\1! ', t, flags=re.IGNORECASE)
+
+    # Espaços duplicados
+    t = re.sub(r'\s{2,}', ' ', t)
+
+    return t.strip()
+
+import re
+
+def quebrar_em_mensagens(texto: str, max_frases: int = 2):
+    if not texto:
+        return []
+
+    frases = re.split(r'(?<=[.!?])\s+', texto)
+    mensagens = []
+    bloco = []
+
+    for frase in frases:
+        frase = frase.strip()
+        if not frase:
+            continue
+
+        bloco.append(frase)
+
+        if len(bloco) >= max_frases:
+            mensagens.append(" ".join(bloco))
+            bloco = []
+
+    if bloco:
+        mensagens.append(" ".join(bloco))
+
+    return mensagens
+
+import re
+
+PALAVRAS_FOTO = ["foto", "fotos", "imagem", "imagens", "vídeo", "video", "videos", "vídeos"]
+
+def detectar_pedido_foto(texto: str) -> bool:
+    t = (texto or "").lower()
+    return any(p in t for p in PALAVRAS_FOTO)
+
+def detectar_caminhao_no_texto(texto: str):
+    """
+    Detecta caminhão mesmo com nome incompleto.
+    Ex: 'daf 460 2019', 'fh 460', 'scania 440'
+    """
+    if not texto:
+        return None
+
+    t = texto.lower()
+
+    for c in carregar_caminhoes():
+        if not c.get("ativo", True):
+            continue
+
+        pontos = 0
+
+        marca = (c.get("marca") or "").lower()
+        modelo = (c.get("modelo") or "").lower()
+        ano = str(c.get("ano") or "")
+        tracao = (c.get("tracao") or "").lower()
+
+        # 1️⃣ Marca
+        if marca and marca in t:
+            pontos += 1
+
+        # 2️⃣ Número do modelo / potência (ex: 460, 440)
+        numeros_modelo = [p for p in modelo.split() if p.isdigit()]
+        for n in numeros_modelo:
+            if n in t:
+                pontos += 1
+                break
+
+        # fallback: número solto (460, 440)
+        for n in ["460", "440", "540", "480"]:
+            if n in t and n in modelo:
+                pontos += 1
+                break
+
+        # 3️⃣ Ano
+        if ano and ano in t:
+            pontos += 1
+
+        # 4️⃣ Tração por apelido (toco, truck, traçado)
+        MAPA_TRACAO = {
+            "toco": "4x2",
+            "truck": "6x2",
+            "trucado": "6x2",
+            "traçado": "6x4",
+            "tracado": "6x4",
+            "bitruck": "8x2"
+        }
+
+        for apelido, tr in MAPA_TRACAO.items():
+            if apelido in t and tr == tracao:
+                pontos += 1
+
+        # 🎯 REGRA FINAL
+        if pontos >= 2:
+            return c
+
+    return None
+
+
+def enviar_mensagem(numero, texto):
+    url = f"https://api.z-api.io/instances/{INSTANCE_ID}/token/{INSTANCE_TOKEN}/send-text"
+    headers = {
+        "Client-Token": CLIENT_TOKEN,
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "phone": numero,
+        "message": texto
+    }
+
+    try:
+        requests.post(url, json=payload, headers=headers, timeout=10)
+    except Exception as e:
+        print("Erro ao enviar mensagem:", e)
+
+
+def transcrever_audio(caminho_audio):
+    """
+    Recebe um arquivo de áudio (.ogg) e retorna o texto transcrito.
+    Se falhar, retorna None.
+    """
+    try:
+        with open(caminho_audio, "rb") as audio_file:
+            transcript = client.audio.transcriptions.create(
+                model="gpt-4o-mini-transcribe",
+                file=audio_file
+            )
+
+        texto = transcript.text.strip()
+        return texto if texto else None
+
+    except Exception as e:
+        print("Erro ao transcrever áudio:", e)
+        return None
+
+
+def avisar_gabriel(numero_cliente, sessao):
+    resumo = "\n".join(sessao.get("resumo_para_gabriel", []))
+
+    texto = (
+        "🔔 *NOVO LEAD TRANSFERIDO*\n\n"
+        f"📞 Cliente: {numero_cliente}\n\n"
+        f"📝 Conversa:\n{resumo}\n\n"
+        "🤝 Atendimento transferido para você."
+    )
+
+    enviar_mensagem(NUMERO_GABRIEL, texto)
+
+
+
+
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    data = request.json
+    print("WEBHOOK RECEBIDO:", data)
+
+    try:
+        # ==============================
+        # 1. FILTROS BÁSICOS
+        # ==============================
+        if not data:
+            return "OK", 200
+
+        if data.get("fromMe") is True:
+            return "OK", 200
+
+        numero = data.get("phone")
+        if not numero:
+            return "OK", 200
+
+        # ==============================
+        # 2. GARANTE SESSÃO
+        # ==============================
+        if numero not in SESSOES:
+            SESSOES[numero] = {
+                "caminhao_em_foco": None,
+                "historico": [
+                    {"role": "system", "content": SYSTEM_PROMPT}
+                ],
+                "primeira_resposta": True,
+                "pausado_para_gabriel": False,
+                "resumo_para_gabriel": []
+            }
+
+        sessao = SESSOES[numero]
+
+        # Se já transferiu, não responde mais
+        if sessao.get("pausado_para_gabriel"):
+            return "OK", 200
+
+        # ==============================
+        # 3. EXTRAI TEXTO / ÁUDIO
+        # ==============================
+        texto = None
+
+        # TEXTO
+        if isinstance(data.get("text"), dict):
+            texto = data.get("text", {}).get("message")
+        elif isinstance(data.get("text"), str):
+            texto = data.get("text")
+
+        if not texto:
+            texto = data.get("body") or data.get("message") or data.get("caption")
+
+        # ÁUDIO
+        if not texto and data.get("audio"):
+            audio_url = data.get("audio", {}).get("audioUrl")
+            if audio_url:
+                try:
+                    audio_path = f"/tmp/{data.get('messageId')}.ogg"
+                    r = requests.get(audio_url, timeout=10)
+                    with open(audio_path, "wb") as f:
+                        f.write(r.content)
+
+                    texto = transcrever_audio(audio_path)
+
+                except Exception as e:
+                    print("Erro ao transcrever áudio:", e)
+
+        # FALLBACK
+        if not texto:
+            enviar_mensagem(
+                numero,
+                "Patrão, não consegui entender muito bem. "
+                "Se puder, escreve aqui rapidinho ou manda o áudio de novo."
+            )
+            return "OK", 200
+
+        print(f">> Cliente {numero}: {texto}")
+        sessao["resumo_para_gabriel"].append(f"Cliente: {texto}")
+
+        # ==============================
+        # 4. DETECTA CAMINHÃO EM FOCO
+        # ==============================
+        caminhao_detectado = detectar_caminhao_no_texto(texto)
+        if caminhao_detectado:
+            sessao["caminhao_em_foco"] = caminhao_detectado
+
+        # ==============================
+        # 5. PEDIDO DE FOTO / VÍDEO
+        # ==============================
+        if detectar_pedido_foto(texto):
+            caminhao = sessao.get("caminhao_em_foco")
+
+            if caminhao and caminhao.get("imagens"):
+                enviar_mensagem(numero, "Com certeza, patrão. Já te mando.")
+                enviar_imagens_caminhao(
+                    numero,
+                    caminhao["imagens"],
+                    limite=3
+                )
+                return "OK", 200
+
+            enviar_mensagem(
+                numero,
+                "Consigo sim, patrão. Só me diz qual caminhão você quer ver."
+            )
+            return "OK", 200
+
+        # ==============================
+        # 6. GPT (CONVERSA)
+        # ==============================
+        historico = sessao["historico"]
+        historico.append({"role": "user", "content": texto})
+
+        resposta = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=historico,
+            temperature=0.3
+        )
+
+        mensagem = resposta.choices[0].message.content.strip()
+
+        # Primeira saudação (uma única vez)
+        if sessao["primeira_resposta"]:
+            if "ronaldo" not in mensagem.lower():
+                mensagem = f"Fala, tudo bem? Aqui é o Ronaldo, da RW Caminhões. {mensagem}"
+            sessao["primeira_resposta"] = False
+
+        # Limpa pontuação e sujeira
+        mensagem = limpar_resposta_whatsapp(mensagem)
+
+        sessao["resumo_para_gabriel"].append(f"Ronaldo: {mensagem}")
+        historico.append({"role": "assistant", "content": mensagem})
+
+        # ==============================
+        # 7. DETECTA TRANSFERÊNCIA
+        # ==============================
+        if "gabriel" in mensagem.lower():
+            sessao["pausado_para_gabriel"] = True
+            avisar_gabriel(numero, sessao)
+
+        # ==============================
+        # 8. QUEBRA EM VÁRIAS MENSAGENS
+        # ==============================
+        mensagens = quebrar_em_mensagens(mensagem)
+
+        for i, msg in enumerate(mensagens):
+            enviar_mensagem(numero, msg)
+
+            if i < len(mensagens) - 1:
+                time.sleep(2)
+
+    except Exception as e:
+        import traceback
+        print("ERRO NO WEBHOOK:", e)
+        traceback.print_exc()
+
+    return "OK", 200
+
+
 
 
 
