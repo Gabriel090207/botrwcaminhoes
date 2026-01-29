@@ -1024,7 +1024,6 @@ def avisar_gabriel(numero_cliente, sessao):
 
     enviar_mensagem(NUMERO_GABRIEL, texto)
 
-
 def detectar_tracao_pedida(texto: str):
     if not texto:
         return None
@@ -1050,6 +1049,7 @@ def detectar_tracao_pedida(texto: str):
 
     return None
 
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.json
@@ -1059,10 +1059,7 @@ def webhook():
         # ==============================
         # 1. FILTROS BÁSICOS
         # ==============================
-        if not data:
-            return "OK", 200
-
-        if data.get("fromMe") is True:
+        if not data or data.get("fromMe"):
             return "OK", 200
 
         numero = data.get("phone")
@@ -1071,7 +1068,7 @@ def webhook():
 
         message_id = data.get("messageId") or data.get("id")
 
-        if message_id and numero in SESSOES:
+        if numero in SESSOES and message_id:
             if message_id in SESSOES[numero].get("mensagens_processadas", set()):
                 return "OK", 200
 
@@ -1081,19 +1078,17 @@ def webhook():
         if numero not in SESSOES:
             SESSOES[numero] = {
                 "caminhao_em_foco": None,
-                "historico": [
-                    {"role": "system", "content": SYSTEM_PROMPT}
-                ],
+                "historico": [{"role": "system", "content": SYSTEM_PROMPT}],
                 "primeira_resposta": True,
                 "pausado_para_gabriel": False,
+                "aguardando_nome_para_transferencia": False,
                 "resumo_para_gabriel": [],
                 "mensagens_processadas": set(),
-                "aguardando_nome_para_transferencia": False,
             }
 
         sessao = SESSOES[numero]
 
-        if sessao.get("pausado_para_gabriel"):
+        if sessao["pausado_para_gabriel"]:
             return "OK", 200
 
         if message_id:
@@ -1102,35 +1097,22 @@ def webhook():
         # ==============================
         # 3. EXTRAI TEXTO / ÁUDIO
         # ==============================
-        texto = None
-
-        if isinstance(data.get("text"), dict):
-            texto = data.get("text", {}).get("message")
-        elif isinstance(data.get("text"), str):
-            texto = data.get("text")
-
-        if not texto:
-            texto = data.get("body") or data.get("message") or data.get("caption")
+        texto = (
+            data.get("text", {}).get("message")
+            if isinstance(data.get("text"), dict)
+            else data.get("text")
+        ) or data.get("body") or data.get("message") or data.get("caption")
 
         if not texto and data.get("audio"):
-            audio_url = data.get("audio", {}).get("audioUrl")
-            if audio_url:
-                try:
-                    audio_path = f"/tmp/{message_id}.ogg"
-                    r = requests.get(audio_url, timeout=10)
-                    with open(audio_path, "wb") as f:
-                        f.write(r.content)
-                    texto = transcrever_audio(audio_path)
-                except Exception as e:
-                    print("Erro ao baixar/transcrever áudio:", e)
-
-            if not texto:
-                enviar_mensagem(
-                    numero,
-                    "Patrão, não consegui entender muito bem o áudio. "
-                    "Se puder, manda de novo ou escreve aqui rapidinho."
-                )
-                return "OK", 200
+            try:
+                audio_url = data["audio"].get("audioUrl")
+                audio_path = f"/tmp/{message_id}.ogg"
+                r = requests.get(audio_url, timeout=10)
+                with open(audio_path, "wb") as f:
+                    f.write(r.content)
+                texto = transcrever_audio(audio_path)
+            except:
+                pass
 
         if not texto:
             return "OK", 200
@@ -1139,9 +1121,9 @@ def webhook():
         sessao["resumo_para_gabriel"].append(f"Cliente: {texto}")
 
         # ==============================
-        # 4. RECEBE NOME PARA TRANSFERÊNCIA
+        # 4. RECEBE NOME (FECHAMENTO)
         # ==============================
-        if sessao.get("aguardando_nome_para_transferencia"):
+        if sessao["aguardando_nome_para_transferencia"]:
             nome = texto.strip().split()[0].capitalize()
 
             enviar_mensagem(
@@ -1156,45 +1138,59 @@ def webhook():
             return "OK", 200
 
         # ==============================
-        # 5. INTENÇÃO: TRAÇÃO OU CAMINHÃO
+        # 5. DETECTA CAMINHÃO PELO TEXTO
         # ==============================
-        tracao_pedida = detectar_tracao_pedida(texto)
-
-        if tracao_pedida:
-            nomes = filtrar_caminhoes_por_tracao(tracao_pedida)
-
-            if nomes:
-                resposta = "Tem sim, patrão. No momento tenho: " + ", ".join(nomes)
-            else:
-                resposta = (
-                    "No momento não tenho dessa tração disponível, patrão. "
-                    "Mas sempre entra coisa boa."
-                )
-
-            enviar_mensagem(numero, resposta)
-            return "OK", 200
-
         caminhao_detectado = detectar_caminhao_no_texto(texto)
         if caminhao_detectado:
             sessao["caminhao_em_foco"] = caminhao_detectado
 
         # ==============================
-        # 6. PEDIDO DE FOTO / VÍDEO
+        # 6. DETECTA TRAÇÃO (toco / trucado / traçado)
+        # ==============================
+        tracao = detectar_tracao_pedida(texto)
+        if tracao:
+            encontrados = [
+                c for c in carregar_caminhoes()
+                if c.get("ativo", True) and c.get("tracao") == tracao
+            ]
+
+            if encontrados:
+                nomes = [
+                    f"{c.get('marca')} {c.get('modelo')} {c.get('ano')}"
+                    for c in encontrados
+                ]
+                enviar_mensagem(
+                    numero,
+                    "Tem sim, patrão. No momento tenho: " + ", ".join(nomes)
+                )
+
+                # 🔒 FIXA CAMINHÃO SE FOR ÚNICO
+                if len(encontrados) == 1:
+                    sessao["caminhao_em_foco"] = encontrados[0]
+            else:
+                enviar_mensagem(
+                    numero,
+                    "No momento não tenho dessa tração disponível, patrão. "
+                    "Mas sempre entra coisa boa."
+                )
+
+            return "OK", 200
+
+        # ==============================
+        # 7. PEDIDO DE FOTO / VÍDEO
         # ==============================
         if detectar_pedido_foto(texto):
             caminhao = sessao.get("caminhao_em_foco")
 
             if caminhao:
                 imagens = caminhao.get("imagens") or []
-
+                enviar_mensagem(numero, "Com certeza, patrão. Já te mando.")
                 if imagens:
-                    enviar_mensagem(numero, "Com certeza, patrão. Já te mando.")
                     enviar_imagens_caminhao(numero, imagens, limite=3)
                 else:
                     enviar_mensagem(
                         numero,
-                        "Patrão, esse caminhão ainda não tem fotos cadastradas. "
-                        "Já vou verificar certinho e te retorno."
+                        "Patrão, esse caminhão ainda não tem fotos cadastradas."
                     )
                 return "OK", 200
 
@@ -1205,7 +1201,7 @@ def webhook():
             return "OK", 200
 
         # ==============================
-        # 7. GPT (CONVERSA NORMAL)
+        # 8. GPT (CONVERSA NORMAL)
         # ==============================
         historico = sessao["historico"]
         historico.append({"role": "user", "content": texto})
@@ -1218,18 +1214,27 @@ def webhook():
 
         mensagem = limpar_resposta_whatsapp(resposta.choices[0].message.content)
 
-        # Marca quando o bot pediu o nome
+
+        # 🔒 FIXA CAMINHÃO SE O GPT CONFIRMOU UM MODELO
+        if not sessao.get("caminhao_em_foco"):
+            caminhao_do_gpt = detectar_caminhao_no_texto(mensagem)
+        if caminhao_do_gpt:
+            sessao["caminhao_em_foco"] = caminhao_do_gpt
+
+
+        # 🔒 Evita GPT responder pedido de foto
+        if detectar_pedido_foto(texto):
+            return "OK", 200
+
         if "qual é teu nome" in mensagem.lower() or "qual é seu nome" in mensagem.lower():
             sessao["aguardando_nome_para_transferencia"] = True
 
         sessao["resumo_para_gabriel"].append(f"Ronaldo: {mensagem}")
         historico.append({"role": "assistant", "content": mensagem})
 
-        mensagens = quebrar_em_mensagens(mensagem)
-        for i, msg in enumerate(mensagens):
+        for msg in quebrar_em_mensagens(mensagem):
             enviar_mensagem(numero, msg)
-            if i < len(mensagens) - 1:
-                time.sleep(2)
+            time.sleep(1)
 
     except Exception as e:
         import traceback
