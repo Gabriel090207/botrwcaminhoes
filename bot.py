@@ -1026,7 +1026,6 @@ def avisar_gabriel(numero_cliente, sessao):
 
 
 
-
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.json
@@ -1045,13 +1044,12 @@ def webhook():
         numero = data.get("phone")
         if not numero:
             return "OK", 200
-        
+
         message_id = data.get("messageId") or data.get("id")
 
-        if message_id:
-            if numero in SESSOES and message_id in SESSOES[numero]["mensagens_processadas"]:
+        if message_id and numero in SESSOES:
+            if message_id in SESSOES[numero].get("mensagens_processadas", set()):
                 return "OK", 200
-
 
         # ==============================
         # 2. GARANTE SESSÃO
@@ -1066,18 +1064,15 @@ def webhook():
                 "pausado_para_gabriel": False,
                 "resumo_para_gabriel": [],
                 "mensagens_processadas": set(),
-
             }
 
         sessao = SESSOES[numero]
 
         if sessao.get("pausado_para_gabriel"):
             return "OK", 200
-        
 
         if message_id:
             sessao["mensagens_processadas"].add(message_id)
-
 
         # ==============================
         # 3. EXTRAI TEXTO / ÁUDIO
@@ -1097,7 +1092,7 @@ def webhook():
 
             if audio_url:
                 try:
-                    audio_path = f"/tmp/{data.get('messageId')}.ogg"
+                    audio_path = f"/tmp/{message_id}.ogg"
                     r = requests.get(audio_url, timeout=10)
                     with open(audio_path, "wb") as f:
                         f.write(r.content)
@@ -1113,9 +1108,6 @@ def webhook():
                 )
                 return "OK", 200
 
-        # ==============================
-        # 4. CALLBACK VAZIO → IGNORA
-        # ==============================
         if not texto:
             return "OK", 200
 
@@ -1123,47 +1115,44 @@ def webhook():
         sessao["resumo_para_gabriel"].append(f"Cliente: {texto}")
 
         # ==============================
-        # 5. DETECTA CAMINHÃO PELO TEXTO DO CLIENTE
+        # 4. DETECTA CAMINHÃO PELO TEXTO
         # ==============================
         caminhao_detectado = detectar_caminhao_no_texto(texto)
         if caminhao_detectado:
             sessao["caminhao_em_foco"] = caminhao_detectado
 
         # ==============================
-        # 6. PEDIDO DE FOTO / VÍDEO (FIX FINAL)
+        # 5. PEDIDO DE FOTO / VÍDEO
         # ==============================
         if detectar_pedido_foto(texto):
             caminhao = sessao.get("caminhao_em_foco")
 
-        # 🔒 REGRA ABSOLUTA: se já tem caminhão em foco, manda foto
-        if caminhao:
-            imagens = caminhao.get("imagens") or []
+            if caminhao:
+                imagens = caminhao.get("imagens") or []
 
-            if imagens:
-                enviar_mensagem(numero, "Com certeza, patrão. Já te mando.")
-                enviar_imagens_caminhao(
-                    numero,
-                    imagens,
-                    limite=3
-                )
-            else:
-                enviar_mensagem(
-                    numero,
-                    "Patrão, esse caminhão ainda não tem fotos cadastradas. "
-                    "Já vou verificar certinho e te retorno."
-                )
+                if imagens:
+                    enviar_mensagem(numero, "Com certeza, patrão. Já te mando.")
+                    enviar_imagens_caminhao(
+                        numero,
+                        imagens,
+                        limite=3
+                    )
+                else:
+                    enviar_mensagem(
+                        numero,
+                        "Patrão, esse caminhão ainda não tem fotos cadastradas. "
+                        "Já vou verificar certinho e te retorno."
+                    )
+                return "OK", 200
+
+            enviar_mensagem(
+                numero,
+                "Consigo sim, patrão. Qual caminhão você quer ver?"
+            )
             return "OK", 200
 
-        # ❓ Só pergunta qual caminhão se REALMENTE não houver foco
-        enviar_mensagem(
-            numero,
-            "Consigo sim, patrão. Qual caminhão você quer ver?"
-        )
-        return "OK", 200
-
-
         # ==============================
-        # 7. GPT (CONVERSA NORMAL)
+        # 6. GPT (CONVERSA NORMAL)
         # ==============================
         historico = sessao["historico"]
         historico.append({"role": "user", "content": texto})
@@ -1177,33 +1166,18 @@ def webhook():
         mensagem = resposta.choices[0].message.content.strip()
         mensagem = limpar_resposta_whatsapp(mensagem)
 
-        # ==============================
-        # 7.1 FIXA CAMINHÃO SE O GPT DEFINIU
-        # ==============================
         if not sessao.get("caminhao_em_foco"):
             caminhao_do_gpt = detectar_caminhao_no_texto(mensagem)
             if caminhao_do_gpt:
                 sessao["caminhao_em_foco"] = caminhao_do_gpt
 
-        # ==============================
-        # 7.2 PRIMEIRA RESPOSTA (SEM FALLBACK)
-        # ==============================
-        if sessao["primeira_resposta"]:
-            sessao["primeira_resposta"] = False
-
         sessao["resumo_para_gabriel"].append(f"Ronaldo: {mensagem}")
         historico.append({"role": "assistant", "content": mensagem})
 
-        # ==============================
-        # 8. TRANSFERÊNCIA PARA GABRIEL
-        # ==============================
         if "gabriel" in mensagem.lower():
             sessao["pausado_para_gabriel"] = True
             avisar_gabriel(numero, sessao)
 
-        # ==============================
-        # 9. ENVIO (QUEBRA EM MENSAGENS)
-        # ==============================
         mensagens = quebrar_em_mensagens(mensagem)
 
         for i, msg in enumerate(mensagens):
