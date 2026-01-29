@@ -755,24 +755,23 @@ def limpar_texto_whatsapp(texto):
 import re
 
 def normalizar_pontuacao(texto):
+    import re
+
     texto = texto.strip()
 
-    # 1. Remove combinações erradas de pontuação
-    texto = re.sub(r'[.!?,]{2,}', lambda m: m.group(0)[0], texto)
+    # 1️⃣ Remove qualquer combinação errada de pontuação
+    texto = re.sub(r'[.!?,]+', '', texto)
 
-    # 2. Corrige casos tipo "opa!," ou "opa!."
-    texto = re.sub(r'([!?])[\.,]', r'\1', texto)
+    # 2️⃣ Mantém APENAS interrogação quando for pergunta
+    # (remove qualquer outro caractere depois do ?)
+    texto = re.sub(r'\?(.)+', '?', texto)
 
-    # 3. Remove vírgula no final da frase
-    texto = re.sub(r',$', '', texto)
+    # 3️⃣ Remove vírgulas ou pontos no meio da frase
+    texto = texto.replace(',', '')
+    texto = texto.replace('.', '')
+    texto = texto.replace('!', '')
 
-    # 4. REMOVE PONTO FINAL NO FIM DA FRASE
-    texto = re.sub(r'\.$', '', texto)
-
-    # 5. Garante espaço correto após ? ou !
-    texto = re.sub(r'([!?])(\S)', r'\1 \2', texto)
-
-    # 6. Remove espaços duplicados
+    # 4️⃣ Remove espaços duplicados
     texto = re.sub(r'\s{2,}', ' ', texto)
 
     return texto.strip()
