@@ -759,22 +759,23 @@ def normalizar_pontuacao(texto):
 
     texto = texto.strip()
 
-    # 1️⃣ Remove qualquer combinação errada de pontuação
-    texto = re.sub(r'[.!?,]+', '', texto)
+    # Remove combinações erradas tipo "!.," ",." "!!"
+    texto = re.sub(r'([!?.,]){2,}', r'\1', texto)
 
-    # 2️⃣ Mantém APENAS interrogação quando for pergunta
-    # (remove qualquer outro caractere depois do ?)
-    texto = re.sub(r'\?(.)+', '?', texto)
+    # Remove vírgula ou ponto no FINAL da frase
+    texto = re.sub(r'[.,]+$', '', texto)
 
-    # 3️⃣ Remove vírgulas ou pontos no meio da frase
-    texto = texto.replace(',', '')
-    texto = texto.replace('.', '')
-    texto = texto.replace('!', '')
+    # Remove exclamação no final
+    texto = re.sub(r'!$', '', texto)
 
-    # 4️⃣ Remove espaços duplicados
+    # Mantém interrogação se for pergunta
+    # (não faz nada aqui, só garante que não remove)
+
+    # Espaços duplicados
     texto = re.sub(r'\s{2,}', ' ', texto)
 
     return texto.strip()
+
 
 
 def extrair_link(texto, data=None):
@@ -811,7 +812,7 @@ def identificar_caminhao_por_texto(texto):
 
 
 def quebrar_em_mensagens(texto, max_frases=2):
-    frases = re.split(r'(?<=[.!?])\s+', texto)
+    frases = re.split(r'(?<=[.?])\s+', texto)
     mensagens = []
     bloco = []
 
