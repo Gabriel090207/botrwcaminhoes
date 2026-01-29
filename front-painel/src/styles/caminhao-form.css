@@ -20,6 +20,7 @@ textarea {
 }
 
 .caminhao-form {
+
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -65,3 +66,48 @@ textarea {
   background-size: 12px;
   padding-right: 36px;
 }
+
+
+.upload-box {
+  margin-top: 16px;
+}
+
+.upload-placeholder {
+  border: 2px dashed #bbb;
+  border-radius: 8px;
+  padding: 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+
+.upload-placeholder:hover {
+  border-color: #666;
+}
+
+.upload-placeholder span {
+  font-size: 32px;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.preview-container {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.preview-container img {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+
+.upload-placeholder svg {
+  color: #aaa;
+  margin-bottom: 8px;
+}
+

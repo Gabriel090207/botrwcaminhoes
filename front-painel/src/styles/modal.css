@@ -1,25 +1,42 @@
 .modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.6);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-  }
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+
+  display: flex;
+  justify-content: center;
+
+  /* 🔥 permite scroll da tela */
+  overflow-y: auto;
+
+  /* espaço no topo e embaixo */
+  padding: 40px 16px;
+
+  z-index: 1000;
+}
+
   
-  .modal-box {
-    width: 100%;
-    max-width: 420px;
-    background: var(--bg-dark-secondary);
-    border-radius: 14px;
-    border: 1px solid var(--border-dark);
-    padding: 20px;
-  
-    /* estado inicial */
-    transform: translateY(30px);
-    opacity: 0;
-  }
+ .modal-box {
+  width: 100%;
+  max-width: 620px;
+
+  background: var(--bg-dark-secondary);
+  border-radius: 14px;
+  border: 1px solid var(--border-dark);
+
+  padding: 20px;
+
+  /* 🔥 limite de altura */
+  max-height: calc(100vh - 80px);
+
+  /* 🔥 scroll interno */
+  overflow-y: auto;
+
+  /* animação */
+  transform: translateY(30px);
+  opacity: 0;
+}
+
   
   /* quando abrir */
   .modal-box.modal-enter {

@@ -1,5 +1,7 @@
 import { useState, useRef } from 'react'
 import '../styles/caminhao-form.css'
+import { FiUploadCloud } from 'react-icons/fi'
+
 
 export interface Caminhao {
   id: string
@@ -12,8 +14,12 @@ export interface Caminhao {
   tracao: string
   entreEixo: string
 
+  valor: string
+
   resumo: string
   observacao: string
+
+  imagens?: File[]
 }
 
 interface CaminhaoFormProps {
@@ -34,10 +40,16 @@ export function CaminhaoForm({ initialData, onSave }: CaminhaoFormProps) {
       tracao: '',
       entreEixo: '',
 
+      valor: '',
+
       resumo: '',
       observacao: '',
+
+      imagens: []
     }
   )
+
+  const [previews, setPreviews] = useState<string[]>([])
 
   // ===== REFS =====
   const marcaRef = useRef<HTMLInputElement | null>(null)
@@ -47,6 +59,7 @@ export function CaminhaoForm({ initialData, onSave }: CaminhaoFormProps) {
   const quantidadeRef = useRef<HTMLInputElement | null>(null)
   const tracaoRef = useRef<HTMLSelectElement | null>(null)
   const entreEixoRef = useRef<HTMLInputElement | null>(null)
+  const valorRef = useRef<HTMLInputElement | null>(null)
   const resumoRef = useRef<HTMLTextAreaElement | null>(null)
   const observacaoRef = useRef<HTMLTextAreaElement | null>(null)
 
@@ -57,6 +70,29 @@ export function CaminhaoForm({ initialData, onSave }: CaminhaoFormProps) {
     if (e.key !== 'Enter') return
     e.preventDefault()
     nextRef?.current?.focus()
+  }
+
+  // ===== MÁSCARA R$ =====
+  function formatarValor(valor: string) {
+    const numero = valor.replace(/\D/g, '')
+    const inteiro = (Number(numero) / 100).toFixed(2)
+    return inteiro.replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  }
+
+  function handleValorChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const somenteNumeros = e.target.value.replace(/\D/g, '')
+    setForm({ ...form, valor: somenteNumeros })
+  }
+
+  // ===== IMAGENS =====
+  function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!e.target.files) return
+
+    const files = Array.from(e.target.files)
+    setForm({ ...form, imagens: files })
+
+    const urls = files.map((file) => URL.createObjectURL(file))
+    setPreviews(urls)
   }
 
   return (
@@ -100,15 +136,12 @@ export function CaminhaoForm({ initialData, onSave }: CaminhaoFormProps) {
       {/* Quantidade */}
       <input
         ref={quantidadeRef}
-        type="text"
-        inputMode="numeric"
-        pattern="[0-9]*"
         placeholder="Quantidade"
+        inputMode="numeric"
         value={form.quantidade}
         onChange={(e) => {
-          const value = e.target.value
-          if (/^\d*$/.test(value)) {
-            setForm({ ...form, quantidade: value })
+          if (/^\d*$/.test(e.target.value)) {
+            setForm({ ...form, quantidade: e.target.value })
           }
         }}
         onKeyDown={(e) => handleKeyDown(e, tracaoRef)}
@@ -134,6 +167,15 @@ export function CaminhaoForm({ initialData, onSave }: CaminhaoFormProps) {
         placeholder="Entre-eixo (ex: 3.20)"
         value={form.entreEixo}
         onChange={(e) => setForm({ ...form, entreEixo: e.target.value })}
+        onKeyDown={(e) => handleKeyDown(e, valorRef)}
+      />
+
+      {/* Valor */}
+      <input
+        ref={valorRef}
+        placeholder="Valor"
+        value={form.valor ? `R$ ${formatarValor(form.valor)}` : ''}
+        onChange={handleValorChange}
         onKeyDown={(e) => handleKeyDown(e, resumoRef)}
       />
 
@@ -153,6 +195,33 @@ export function CaminhaoForm({ initialData, onSave }: CaminhaoFormProps) {
         value={form.observacao}
         onChange={(e) => setForm({ ...form, observacao: e.target.value })}
       />
+
+      {/* Upload de imagens */}
+      <div className="upload-box">
+        <label htmlFor="imagens">
+          <div className="upload-placeholder">
+  <FiUploadCloud size={36} />
+  <p>Clique para adicionar fotos do caminhão</p>
+</div>
+
+        </label>
+
+        <input
+          id="imagens"
+          type="file"
+          multiple
+          accept="image/*"
+          onChange={handleImageChange}
+          hidden
+        />
+      </div>
+
+      {/* Preview */}
+      <div className="preview-container">
+        {previews.map((src, index) => (
+          <img key={index} src={src} alt="Preview" />
+        ))}
+      </div>
 
       <button
         type="button"

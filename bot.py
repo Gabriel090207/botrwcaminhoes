@@ -20,6 +20,9 @@ from flask_cors import CORS
 
 import time
 
+from enviar_imagens import enviar_imagens_caminhao
+
+
 
 
 # Armazena sessões por número do WhatsApp
@@ -775,6 +778,39 @@ def normalizar_pontuacao(texto):
     return texto.strip()
 
 
+def extrair_link(texto, data=None):
+    # 1️⃣ Tenta extrair link do texto
+    if texto:
+        regex = r"(https?://[^\s]+)"
+        match = re.search(regex, texto)
+        if match:
+            return match.group(1)
+
+    # 2️⃣ Fallback: preview de anúncio do WhatsApp
+    if data:
+        preview_url = data.get("linkPreview", {}).get("canonicalUrl")
+        if preview_url:
+            return preview_url
+
+    return None
+
+def identificar_caminhao_por_texto(texto):
+    caminhoes = carregar_caminhoes()
+    texto_lower = texto.lower()
+
+    for c in caminhoes:
+        if not c.get("ativo", True):
+            continue
+
+        nome = f"{c.get('marca', '')} {c.get('modelo', '')} {c.get('ano', '')}".lower()
+
+        if nome and nome in texto_lower:
+            return c
+
+    return None
+
+
+
 def quebrar_em_mensagens(texto, max_frases=2):
     frases = re.split(r'(?<=[.!?])\s+', texto)
     mensagens = []
@@ -835,7 +871,12 @@ def obter_tracao_caminhao_em_foco(mensagem_cliente):
 
     return None
 
-def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido"):
+def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido", data=None):
+    user_lower = mensagem_cliente.lower()
+
+    # =====================================================
+    # CRIA SESSÃO
+    # =====================================================
     if numero_cliente not in SESSOES:
         ajuste = carregar_prompt()
         system_prompt = PROMPT_BASE + ("\n\nAJUSTE TEMPORÁRIO:\n" + ajuste if ajuste else "")
@@ -848,7 +889,15 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido"):
             "pausado_para_gabriel": False,
             "aguardando_nome": False,
             "nome_cliente": None,
-            "resumo_para_gabriel": []
+            "resumo_para_gabriel": [],
+
+            "origem": None,
+            "link_anuncio": None,
+            "anuncio_detectado": False,
+            "anuncio_bugado": False,
+
+            "caminhao_em_foco": None,
+            "aguardando_caminhao": False
         }
 
     sessao = SESSOES[numero_cliente]
@@ -856,146 +905,81 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido"):
     if sessao["pausado_para_gabriel"]:
         return None
 
-    # =====================================================
-    # REGISTRA CONVERSA NO DASHBOARD (FIRESTORE)
-    # =====================================================
     sessao["ultima_mensagem_cliente"] = datetime.now()
-
-    from dashboard_routes import registrar_conversa_dashboard
-    registrar_conversa_dashboard()
-
     sessao["remarketing_enviado"] = False
-    user_lower = mensagem_cliente.lower()
 
     # =====================================================
-    # LISTAR CAMINHÕES POR TRAÇÃO (SEM MODELO ESPECÍFICO)
+    # DETECTA SE CLIENTE JÁ SAUDOU
     # =====================================================
-    if any(t in user_lower for t in ["toco", "4x2"]):
-        lista = filtrar_caminhoes_por_tracao("4x2")
-        if lista:
-            return [
-                "Tenho sim, patrão.",
-                "Esses são os caminhões toco que tenho hoje:",
-                ", ".join(lista)
-            ]
-        else:
-            return [
-                "No momento não tenho caminhão toco disponível.",
-                "Mas sempre entra coisa boa.",
-                "Vou te mandar o link do meu grupo pra acompanhar.",
-                GRUPO_LINK
-
-            ]
-
-    if any(t in user_lower for t in ["6x2", "trucado", "truck"]):
-        lista = filtrar_caminhoes_por_tracao("6x2")
-        if lista:
-            return [
-                "Tenho sim, patrão.",
-                "Esses são os caminhões trucado que tenho hoje:",
-                ", ".join(lista)
-            ]
-        else:
-            return [
-                "No momento não tenho caminhão trucado disponível.",
-                "Mas sempre entra coisa boa.",
-                "Vou te mandar o link do meu grupo pra acompanhar.",
-                GRUPO_LINK
-
-            ]
-
-    if any(t in user_lower for t in ["6x4", "traçado", "tracado"]):
-        lista = filtrar_caminhoes_por_tracao("6x4")
-        if lista:
-            return [
-                "Tenho sim, patrão.",
-                "Esses são os caminhões traçado que tenho hoje:",
-                ", ".join(lista)
-            ]
-        else:
-            return [
-                "No momento não tenho caminhão traçado disponível.",
-                "Mas sempre entra coisa boa.",
-                "Vou te mandar o link do meu grupo pra acompanhar.",
-                GRUPO_LINK
-
-            ]
-
-    if any(t in user_lower for t in ["8x2", "bitruck"]):
-        lista = filtrar_caminhoes_por_tracao("8x2")
-        if lista:
-            return [
-                "Tenho sim, patrão.",
-                "Esses são os caminhões bitruck que tenho hoje:",
-                ", ".join(lista)
-            ]
-        else:
-            return [
-                "No momento não tenho bitruck disponível.",
-                "Mas sempre entra coisa boa.",
-                "Vou te mandar o link do meu grupo pra acompanhar.",
-                GRUPO_LINK
-
-            ]
-
-    # =====================================================
-    # TRAÇÃO DO CAMINHÃO ESPECÍFICO
-    # =====================================================
-    if any(t in user_lower for t in ["toco", "4x2", "6x2", "6x4", "8x2"]):
-        info = obter_tracao_caminhao_em_foco(mensagem_cliente)
-        if info and info.get("tracao"):
-            return [
-                "É sim, patrão.",
-                f"Esse caminhão é {info['tracao']}."
-            ]
-
-    # =====================================================
-    # ENTRE-EIXO DO CAMINHÃO ESPECÍFICO
-    # =====================================================
-    if any(e in user_lower for e in ["entre eixo", "entre-eixo", "entreeixo", "3.20", "3.30", "3.60"]):
-        info = obter_entre_eixo_caminhao_em_foco(mensagem_cliente)
-        if info and info.get("entreEixo"):
-            return [
-                "Te falo certinho, patrão.",
-                f"O entre-eixo desse caminhão é {info['entreEixo']}."
-            ]
-
-    # =====================================================
-    # AGUARDANDO NOME (TRANSFERÊNCIA)
-    # =====================================================
-    if sessao["aguardando_nome"]:
-        sessao["nome_cliente"] = mensagem_cliente.strip().capitalize()
-        sessao["aguardando_nome"] = False
-        sessao["pausado_para_gabriel"] = True
-
-        sessao["resumo_para_gabriel"].append(
-            f"Nome do cliente: {sessao['nome_cliente']}"
-        )
-
-        avisar_gabriel(numero_cliente, sessao)
-
-        return [
-            f"Beleza, {sessao['nome_cliente']}!",
-            "Já passei tudo pro Gabriel aqui",
-            "Ele vai entrar em contato contigo pra alinhar certinho"
+    cliente_saudou = any(
+        s in user_lower for s in [
+            "bom dia", "boa tarde", "boa noite", "opa", "fala", "e aí", "eai", "oi", "olá"
         ]
+    )
+
+    def saudacao_inicial(texto):
+        if sessao["primeira_resposta"]:
+            sessao["primeira_resposta"] = False
+            if cliente_saudou:
+                return texto
+            return f"Fala, tudo bem? Aqui é o Ronaldo, da RW Caminhões. {texto}"
+        return texto
 
     # =====================================================
-    # BLOQUEIO DE VALOR
+    # IDENTIFICA CAMINHÃO PELO TEXTO
+    # =====================================================
+    if not sessao["caminhao_em_foco"]:
+        caminhao = identificar_caminhao_por_texto(mensagem_cliente)
+        if caminhao:
+            sessao["caminhao_em_foco"] = caminhao
+
+    # =====================================================
+    # PEDIDO DE FOTOS
+    # =====================================================
+    if any(p in user_lower for p in ["foto", "fotos", "imagem", "imagens"]):
+        caminhao = sessao.get("caminhao_em_foco")
+
+        if caminhao and caminhao.get("imagens"):
+            enviar_imagens_caminhao(
+                numero_cliente,
+                caminhao["imagens"],
+                limite=3
+            )
+            return saudacao_inicial("Com certeza, patrão. Vou enviar.")
+
+        return saudacao_inicial("Consigo sim, patrão. Me confirma qual caminhão você quer ver?")
+
+    # =====================================================
+    # VALOR (SEM TRANSFERÊNCIA)
     # =====================================================
     if any(v in user_lower for v in ["valor", "preço", "quanto", "custa"]):
+        caminhao = sessao.get("caminhao_em_foco")
+
+        if caminhao and caminhao.get("valor"):
+            return saudacao_inicial(
+                f"Patrão, esse tá por R$ {caminhao['valor']}. "
+                "É caminhão de repasse direto, sem maquiagem."
+            )
+
+    # =====================================================
+    # INTERESSE EM FECHAR
+    # =====================================================
+    if any(g in user_lower for g in ["quero fechar", "vamos fechar", "quero comprar"]):
         sessao["aguardando_nome"] = True
-        sessao["resumo_para_gabriel"].append(
-            f"Interesse em valor: {mensagem_cliente}"
+        sessao["resumo_para_gabriel"].append(f"Interesse em fechar: {mensagem_cliente}")
+        return saudacao_inicial(
+            "Perfeito, patrão. Só pra eu te apresentar certinho pro Gabriel, qual é teu nome?"
         )
 
-        return [
-            "Patrão, esse caminhão tá em repasse.",
-            "Por isso o valor fica bem melhor que o normal.",
-            "Pra não te passar informação errada,",
-            "prefiro alinhar isso direto com o Gabriel.",
-            "Qual é teu nome?"
-        ]
+    # =====================================================
+    # NEGOCIAÇÃO / DESCONTO
+    # =====================================================
+    if any(g in user_lower for g in ["desconto", "melhora o preço", "faz por menos", "negocia"]):
+        sessao["aguardando_nome"] = True
+        sessao["resumo_para_gabriel"].append(f"Negociação: {mensagem_cliente}")
+        return saudacao_inicial(
+            "Entendo, patrão. Esse ajuste eu prefiro alinhar direto com o Gabriel. Qual é teu nome?"
+        )
 
     # =====================================================
     # GPT NORMAL
@@ -1010,25 +994,15 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido"):
     )
 
     mensagem = resposta.choices[0].message.content.strip()
-
-    if sessao["primeira_resposta"]:
-        mensagem = "Ôpa! Aqui é o Ronaldo, da RW Caminhões. " + mensagem.lstrip(" ,.-")
-        sessao["primeira_resposta"] = False
-
     mensagem = remover_reapresentacao(mensagem)
     mensagem = limpar_texto_whatsapp(mensagem)
     mensagem = normalizar_pontuacao(mensagem)
 
-    mensagens = [
-        normalizar_pontuacao(m)
-        for m in quebrar_em_mensagens(mensagem)
-    ]
-
-    if not mensagens:
-        mensagens = ["Tudo certo por aí?"]
+    mensagem = saudacao_inicial(mensagem)
 
     historico.append({"role": "assistant", "content": mensagem})
-    return mensagens
+
+    return quebrar_em_mensagens(mensagem)
 
 
 def avisar_gabriel(numero_cliente, sessao):
@@ -1160,7 +1134,8 @@ def webhook():
 
         print(f">> Cliente {numero}: {texto}")
 
-        respostas = processar_mensagem(texto, numero)
+        respostas = processar_mensagem(texto, numero, data)
+
 
         # 🔕 Se a conversa foi transferida, nunca mais responder
         if respostas is None:
