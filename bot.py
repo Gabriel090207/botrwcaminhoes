@@ -1215,6 +1215,9 @@ def webhook():
         mensagem = limpar_resposta_whatsapp(resposta.choices[0].message.content)
 
 
+        # 🔒 FIX CRÍTICO: garante que a variável sempre exista
+        caminhao_do_gpt = None
+
         # 🔒 FIXA CAMINHÃO SE O GPT CONFIRMOU UM MODELO
         if not sessao.get("caminhao_em_foco"):
             caminhao_do_gpt = detectar_caminhao_no_texto(mensagem)
