@@ -148,6 +148,19 @@ Você é o atendimento humano da empresa RW Caminhões.
 Nome apresentado ao cliente: Ronaldo.
 Gabriel é o dono da RW Caminhões e a autoridade final do atendimento.
 
+VARIAÇÃO DE AFIRMAÇÕES:
+
+Evite repetir sempre as mesmas expressões como:
+- "Tenho sim, patrão"
+
+Alterne naturalmente com:
+- "Tem sim"
+- "Esse tem"
+- "Esse é"
+- "Dá sim"
+
+Sempre mantendo o tom humano e simples.
+
 
 REGRA ABSOLUTA:
 - Você NÃO é IA
@@ -171,7 +184,16 @@ Evite respostas longas.
 Se precisar explicar algo maior, quebre em mensagens curtas.
 Nunca escreva parágrafos longos.
 
-ABERTURA DA CONVERSA (REGRA ABSOLUTA):
+LINGUAGEM DE CAMINHONEIRO (REGRA):
+
+Considere como equivalentes:
+- toco = 4x2
+- truck = 6x2
+- traçado = 6x4
+
+Nunca negar disponibilidade apenas por diferença de termo.
+Sempre interpretar a linguagem do cliente de forma prática.
+
 
 ABERTURA DA CONVERSA (REGRA ABSOLUTA):
 
@@ -304,6 +326,23 @@ Exemplos naturais:
 "Vou te colocar direto com o Gabriel pra resolver isso certinho."
 
 
+VALOR (REGRA IMPORTANTE):
+
+Perguntar valor NÃO é intenção de compra imediata.
+
+Quando o cliente perguntar preço ou valor:
+- Responda o valor se ele estiver disponível
+- Explique que é repasse
+- NÃO transfira para o Gabriel
+- NÃO peça nome
+- NÃO conduza para fechamento
+
+Transferência só deve ocorrer quando houver:
+- pedido de negociação
+- financiamento
+- intenção clara de compra
+
+
 REGRA DE OURO DO ATENDIMENTO:
 - Quando o cliente fizer uma pergunta:
   SEMPRE responda primeiro a pergunta dele
@@ -321,6 +360,61 @@ Exemplos proibidos:
 "O que você procura?"
 "Qual seria seu orçamento?"
 "Você já tem caminhão?"
+
+
+MÚLTIPLAS INTENÇÕES NA MESMA FRASE:
+
+Se o cliente fizer mais de um pedido na mesma mensagem
+(ex: valor + foto, valor + informação):
+
+- Responda TODOS os pedidos
+- Em mensagens curtas, separadas
+- Mantendo ordem natural da conversa
+
+Nunca ignore parte da pergunta.
+
+CONTEXTO JÁ DEFINIDO (REGRA CRÍTICA):
+
+Se o cliente JÁ informou:
+- qual caminhão quer
+- ou o caminhão está claro no contexto da conversa
+
+NUNCA:
+- perguntar novamente qual caminhão é
+- pedir confirmação desnecessária
+- reiniciar o assunto
+
+Sempre:
+- seguir a conversa normalmente
+- responder direto ao que o cliente pediu
+
+Exemplo correto:
+Cliente: "daf 460 2019 quero foto"
+Resposta: "Com certeza, patrão. Já te mando as fotos."
+
+Exemplo proibido:
+"Só me confirma qual caminhão você quer ver?"
+
+CONFIRMAÇÕES CURTAS (REGRA):
+
+Respostas curtas do cliente como:
+- "sim"
+- "isso"
+- "isso mesmo"
+- "ok"
+- "pode mandar"
+
+Devem ser interpretadas como CONTINUIDADE da conversa,
+e NÃO como uma nova intenção.
+
+NUNCA:
+- mudar de assunto
+- reiniciar perguntas
+- voltar etapas já concluídas
+
+Sempre:
+- seguir o fluxo atual naturalmente
+
 
 CONVERSA HUMANA (REGRA SOCIAL):
 - Quando o cliente fizer perguntas sociais ou de cordialidade
@@ -552,6 +646,22 @@ Se o cliente pedir fotos ou vídeos, responda apenas:
 Nunca justificar.
 Nunca mandar sem o cliente pedir.
 Nunca falar "posso te mandar", apenas confirme e diga que já vai mandar.
+
+
+FOTOS E VÍDEOS (REGRA ABSOLUTA):
+
+Quando o cliente pedir fotos ou vídeos:
+
+- Se o caminhão já estiver claro na conversa:
+  NUNCA perguntar novamente qual caminhão é
+  NUNCA pedir confirmação
+  Apenas confirmar e avisar que vai mandar
+
+Resposta padrão:
+"Com certeza, patrão. Já te mando."
+
+- Só perguntar qual caminhão é
+  se realmente NÃO houver nenhuma referência clara antes
 
 
 ÁUDIO (REGRA DE ATENDIMENTO):
@@ -871,6 +981,18 @@ def obter_tracao_caminhao_em_foco(mensagem_cliente):
 
     return None
 
+
+MAPA_TRACAO = {
+    "toco": "4x2",
+    "4x2": "4x2",
+    "truck": "6x2",
+    "6x2": "6x2",
+    "traçado": "6x4",
+    "tracado": "6x4",
+    "6x4": "6x4"
+}
+
+
 def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido", data=None):
     user_lower = mensagem_cliente.lower()
 
@@ -902,7 +1024,7 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido", data=Non
     sessao["remarketing_enviado"] = False
 
     # =====================================================
-    # DETECTA SAUDAÇÃO DO CLIENTE
+    # DETECTA SAUDAÇÃO
     # =====================================================
     cliente_saudou = any(
         s in user_lower for s in [
@@ -911,15 +1033,24 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido", data=Non
     )
 
     def aplicar_saudacao(texto):
+        texto = texto.strip()
+
         if sessao["primeira_resposta"]:
             sessao["primeira_resposta"] = False
+
             if cliente_saudou:
                 return texto
-            return f"Fala, tudo bem? Aqui é o Ronaldo, da RW Caminhões. {texto}"
+
+            saudacao = "Fala, tudo bem? Aqui é o Ronaldo, da RW Caminhões."
+            while texto and texto[0] in [",", ".", "!", " "]:
+                texto = texto[1:].lstrip()
+
+            return f"{saudacao} {texto}" if texto else saudacao
+
         return texto
 
     # =====================================================
-    # IDENTIFICA CAMINHÃO PELO TEXTO
+    # IDENTIFICA CAMINHÃO EM FOCO
     # =====================================================
     if not sessao["caminhao_em_foco"]:
         caminhao = identificar_caminhao_por_texto(mensagem_cliente)
@@ -927,47 +1058,72 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido", data=Non
             sessao["caminhao_em_foco"] = caminhao
 
     # =====================================================
+    # TOCO / TRUCK / TRAÇADO
+    # =====================================================
+    for palavra, tracao in MAPA_TRACAO.items():
+        if palavra in user_lower:
+            caminhao = sessao.get("caminhao_em_foco")
+
+            if caminhao:
+                if caminhao.get("tracao") == tracao:
+                    return aplicar_saudacao(
+                        f"Tenho sim, patrão. Esse é {tracao}, bem alinhado pra proposta de repasse"
+                    )
+
+                return aplicar_saudacao(
+                    f"Esse específico não é {palavra}, mas sempre entra opção assim. "
+                    "Vou te mandar o link do meu grupo pra acompanhar"
+                )
+
+            opcoes = filtrar_caminhoes_por_tracao(tracao)
+
+            if opcoes:
+                return aplicar_saudacao(
+                    f"Tenho sim, patrão. Hoje tenho: {', '.join(opcoes)}"
+                )
+
+            return aplicar_saudacao(
+                f"No momento não tenho {palavra} disponível, "
+                "mas sempre entra coisa boa. Vou te mandar o link do meu grupo pra acompanhar"
+            )
+
+    # =====================================================
     # PEDIDO DE FOTOS
     # =====================================================
     if any(p in user_lower for p in ["foto", "fotos", "imagem", "imagens"]):
         caminhao = sessao.get("caminhao_em_foco")
 
-        # Já tem caminhão em foco → CONFIRMA
         if caminhao:
-            nome = f"{caminhao['marca']} {caminhao['modelo']} {caminhao['ano']}"
+            if caminhao.get("imagens"):
+                enviar_imagens_caminhao(
+                    numero_cliente,
+                    caminhao["imagens"],
+                    limite=3
+                )
+                return aplicar_saudacao("Com certeza, patrão. Já te mando as fotos")
+
             return aplicar_saudacao(
-                f"Consigo sim, patrão. Só confirmando: é do {nome}, certo?"
+                "Consigo sim, patrão. Só estou conferindo as fotos certinho e já te mando"
             )
 
-        # Não sabe qual caminhão → PERGUNTA
         return aplicar_saudacao(
-            "Consigo sim, patrão. Só me confirma qual caminhão você quer ver?"
+            "Consigo sim, patrão. Só me confirma qual caminhão você quer ver"
         )
 
     # =====================================================
-    # CONFIRMAÇÃO APÓS FOTO
-    # =====================================================
-    if sessao["caminhao_em_foco"] and user_lower in ["sim", "isso", "isso mesmo", "pode mandar", "correto"]:
-        caminhao = sessao["caminhao_em_foco"]
-
-        if caminhao.get("imagens"):
-            enviar_imagens_caminhao(
-                numero_cliente,
-                caminhao["imagens"],
-                limite=3
-            )
-            return aplicar_saudacao("Com certeza, patrão. Vou enviar")
-
-    # =====================================================
-    # VALOR (SEM TRANSFERÊNCIA AUTOMÁTICA)
+    # VALOR
     # =====================================================
     if any(v in user_lower for v in ["valor", "preço", "quanto", "custa"]):
         caminhao = sessao.get("caminhao_em_foco")
 
         if caminhao and caminhao.get("valor"):
             return aplicar_saudacao(
-                f"Esse tá por R$ {caminhao['valor']}. É caminhão de repasse direto, sem maquiagem"
+                f"Esse tá por R$ {caminhao['valor']}. Caminhão de repasse direto, sem maquiagem"
             )
+
+        return aplicar_saudacao(
+            "Esse valor eu prefiro confirmar certinho pra não te falar errado. Já confiro pra você"
+        )
 
     # =====================================================
     # INTERESSE EM FECHAR
@@ -980,7 +1136,7 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido", data=Non
         )
 
     # =====================================================
-    # NEGOCIAÇÃO / DESCONTO
+    # NEGOCIAÇÃO
     # =====================================================
     if any(n in user_lower for n in ["desconto", "negocia", "melhora o preço", "faz por menos"]):
         sessao["aguardando_nome"] = True
@@ -990,7 +1146,7 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido", data=Non
         )
 
     # =====================================================
-    # GPT NORMAL (APENAS QUANDO NECESSÁRIO)
+    # GPT (FALLBACK)
     # =====================================================
     historico = sessao["historico"]
     historico.append({"role": "user", "content": mensagem_cliente})
