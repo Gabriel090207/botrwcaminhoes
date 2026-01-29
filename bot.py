@@ -1072,7 +1072,6 @@ def webhook():
         # ==============================
         texto = None
 
-        # TEXTO
         if isinstance(data.get("text"), dict):
             texto = data.get("text", {}).get("message")
         elif isinstance(data.get("text"), str):
@@ -1098,7 +1097,6 @@ def webhook():
                 except Exception as e:
                     print("Erro ao baixar/transcrever áudio:", e)
 
-            # ⚠️ Áudio inválido → responde fallback
             if not texto:
                 enviar_mensagem(
                     numero,
@@ -1111,7 +1109,6 @@ def webhook():
         # 4. CALLBACK VAZIO → IGNORA
         # ==============================
         if not texto:
-            # Callback sem texto nem áudio (normal do WhatsApp)
             return "OK", 200
 
         print(f">> Cliente {numero}: {texto}")
@@ -1125,18 +1122,24 @@ def webhook():
             sessao["caminhao_em_foco"] = caminhao_detectado
 
         # ==============================
-        # 6. PEDIDO DE FOTO / VÍDEO
+        # 6. PEDIDO DE FOTO / VÍDEO (CORRIGIDO)
         # ==============================
         if detectar_pedido_foto(texto):
             caminhao = sessao.get("caminhao_em_foco")
 
-            if caminhao and caminhao.get("imagens"):
-                enviar_mensagem(numero, "Com certeza, patrão. Já te mando.")
-                enviar_imagens_caminhao(
-                    numero,
-                    caminhao["imagens"],
-                    limite=3
-                )
+            if caminhao:
+                if caminhao.get("imagens"):
+                    enviar_mensagem(numero, "Com certeza, patrão. Já te mando.")
+                    enviar_imagens_caminhao(
+                        numero,
+                        caminhao["imagens"],
+                        limite=3
+                    )
+                else:
+                    enviar_mensagem(
+                        numero,
+                        "Com certeza, patrão. Vou verificar as fotos certinho e já te retorno."
+                    )
                 return "OK", 200
 
             enviar_mensagem(
@@ -1165,7 +1168,6 @@ def webhook():
                 mensagem = f"Fala, tudo bem? Aqui é o Ronaldo, da RW Caminhões. {mensagem}"
             sessao["primeira_resposta"] = False
 
-        # Limpa pontuação
         mensagem = limpar_resposta_whatsapp(mensagem)
 
         sessao["resumo_para_gabriel"].append(f"Ronaldo: {mensagem}")
