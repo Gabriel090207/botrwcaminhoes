@@ -1186,7 +1186,7 @@ def webhook():
                 imagens = caminhao.get("imagens") or []
                 enviar_mensagem(numero, "Com certeza, patrão. Já te mando.")
                 if imagens:
-                    enviar_imagens_caminhao(numero, imagens, limite=3)
+                    enviar_imagens_caminhao(numero, imagens, limite=20)
                 else:
                     enviar_mensagem(
                         numero,
