@@ -890,14 +890,7 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido", data=Non
             "aguardando_nome": False,
             "nome_cliente": None,
             "resumo_para_gabriel": [],
-
-            "origem": None,
-            "link_anuncio": None,
-            "anuncio_detectado": False,
-            "anuncio_bugado": False,
-
-            "caminhao_em_foco": None,
-            "aguardando_caminhao": False
+            "caminhao_em_foco": None
         }
 
     sessao = SESSOES[numero_cliente]
@@ -909,15 +902,15 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido", data=Non
     sessao["remarketing_enviado"] = False
 
     # =====================================================
-    # DETECTA SE CLIENTE JÁ SAUDOU
+    # DETECTA SAUDAÇÃO DO CLIENTE
     # =====================================================
     cliente_saudou = any(
         s in user_lower for s in [
-            "bom dia", "boa tarde", "boa noite", "opa", "fala", "e aí", "eai", "oi", "olá"
+            "bom dia", "boa tarde", "boa noite", "opa", "fala", "e ai", "e aí", "oi", "olá"
         ]
     )
 
-    def saudacao_inicial(texto):
+    def aplicar_saudacao(texto):
         if sessao["primeira_resposta"]:
             sessao["primeira_resposta"] = False
             if cliente_saudou:
@@ -939,50 +932,65 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido", data=Non
     if any(p in user_lower for p in ["foto", "fotos", "imagem", "imagens"]):
         caminhao = sessao.get("caminhao_em_foco")
 
-        if caminhao and caminhao.get("imagens"):
+        # Já tem caminhão em foco → CONFIRMA
+        if caminhao:
+            nome = f"{caminhao['marca']} {caminhao['modelo']} {caminhao['ano']}"
+            return aplicar_saudacao(
+                f"Consigo sim, patrão. Só confirmando: é do {nome}, certo?"
+            )
+
+        # Não sabe qual caminhão → PERGUNTA
+        return aplicar_saudacao(
+            "Consigo sim, patrão. Só me confirma qual caminhão você quer ver?"
+        )
+
+    # =====================================================
+    # CONFIRMAÇÃO APÓS FOTO
+    # =====================================================
+    if sessao["caminhao_em_foco"] and user_lower in ["sim", "isso", "isso mesmo", "pode mandar", "correto"]:
+        caminhao = sessao["caminhao_em_foco"]
+
+        if caminhao.get("imagens"):
             enviar_imagens_caminhao(
                 numero_cliente,
                 caminhao["imagens"],
                 limite=3
             )
-            return saudacao_inicial("Com certeza, patrão. Vou enviar.")
-
-        return saudacao_inicial("Consigo sim, patrão. Me confirma qual caminhão você quer ver?")
+            return aplicar_saudacao("Com certeza, patrão. Vou enviar")
 
     # =====================================================
-    # VALOR (SEM TRANSFERÊNCIA)
+    # VALOR (SEM TRANSFERÊNCIA AUTOMÁTICA)
     # =====================================================
     if any(v in user_lower for v in ["valor", "preço", "quanto", "custa"]):
         caminhao = sessao.get("caminhao_em_foco")
 
         if caminhao and caminhao.get("valor"):
-            return saudacao_inicial(
-                f"Patrão, esse tá por R$ {caminhao['valor']}. "
-                "É caminhão de repasse direto, sem maquiagem."
+            return aplicar_saudacao(
+                f"Esse tá por R$ {caminhao['valor']}. É caminhão de repasse direto, sem maquiagem"
             )
 
     # =====================================================
     # INTERESSE EM FECHAR
     # =====================================================
-    if any(g in user_lower for g in ["quero fechar", "vamos fechar", "quero comprar"]):
+    if any(i in user_lower for i in ["quero fechar", "vamos fechar", "quero comprar"]):
         sessao["aguardando_nome"] = True
         sessao["resumo_para_gabriel"].append(f"Interesse em fechar: {mensagem_cliente}")
-        return saudacao_inicial(
+        return aplicar_saudacao(
             "Perfeito, patrão. Só pra eu te apresentar certinho pro Gabriel, qual é teu nome?"
         )
 
     # =====================================================
     # NEGOCIAÇÃO / DESCONTO
     # =====================================================
-    if any(g in user_lower for g in ["desconto", "melhora o preço", "faz por menos", "negocia"]):
+    if any(n in user_lower for n in ["desconto", "negocia", "melhora o preço", "faz por menos"]):
         sessao["aguardando_nome"] = True
-        sessao["resumo_para_gabriel"].append(f"Negociação: {mensagem_cliente}")
-        return saudacao_inicial(
-            "Entendo, patrão. Esse ajuste eu prefiro alinhar direto com o Gabriel. Qual é teu nome?"
+        sessao["resumo_para_gabriel"].append(f"Pedido de negociação: {mensagem_cliente}")
+        return aplicar_saudacao(
+            "Entendo, patrão. Isso eu prefiro alinhar direto com o Gabriel. Qual é teu nome?"
         )
 
     # =====================================================
-    # GPT NORMAL
+    # GPT NORMAL (APENAS QUANDO NECESSÁRIO)
     # =====================================================
     historico = sessao["historico"]
     historico.append({"role": "user", "content": mensagem_cliente})
@@ -997,8 +1005,7 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido", data=Non
     mensagem = remover_reapresentacao(mensagem)
     mensagem = limpar_texto_whatsapp(mensagem)
     mensagem = normalizar_pontuacao(mensagem)
-
-    mensagem = saudacao_inicial(mensagem)
+    mensagem = aplicar_saudacao(mensagem)
 
     historico.append({"role": "assistant", "content": mensagem})
 
