@@ -1025,6 +1025,30 @@ def avisar_gabriel(numero_cliente, sessao):
     enviar_mensagem(NUMERO_GABRIEL, texto)
 
 
+def detectar_tracao_pedida(texto: str):
+    if not texto:
+        return None
+
+    t = texto.lower()
+
+    MAPA_TRACAO = {
+        "toco": "4x2",
+        "4x2": "4x2",
+        "truck": "6x2",
+        "trucado": "6x2",
+        "6x2": "6x2",
+        "traçado": "6x4",
+        "tracado": "6x4",
+        "6x4": "6x4",
+        "bitruck": "8x2",
+        "8x2": "8x2"
+    }
+
+    for palavra, tracao in MAPA_TRACAO.items():
+        if palavra in t:
+            return tracao
+
+    return None
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
@@ -1064,6 +1088,7 @@ def webhook():
                 "pausado_para_gabriel": False,
                 "resumo_para_gabriel": [],
                 "mensagens_processadas": set(),
+                "aguardando_nome_para_transferencia": False,
             }
 
         sessao = SESSOES[numero]
@@ -1089,7 +1114,6 @@ def webhook():
 
         if not texto and data.get("audio"):
             audio_url = data.get("audio", {}).get("audioUrl")
-
             if audio_url:
                 try:
                     audio_path = f"/tmp/{message_id}.ogg"
@@ -1115,14 +1139,47 @@ def webhook():
         sessao["resumo_para_gabriel"].append(f"Cliente: {texto}")
 
         # ==============================
-        # 4. DETECTA CAMINHÃO PELO TEXTO
+        # 4. RECEBE NOME PARA TRANSFERÊNCIA
         # ==============================
+        if sessao.get("aguardando_nome_para_transferencia"):
+            nome = texto.strip().split()[0].capitalize()
+
+            enviar_mensagem(
+                numero,
+                f"Valeu, {nome}! 👍 Em breve o Gabriel vai entrar em contato contigo pra alinhar tudo certinho."
+            )
+
+            sessao["aguardando_nome_para_transferencia"] = False
+            sessao["pausado_para_gabriel"] = True
+
+            avisar_gabriel(numero, sessao)
+            return "OK", 200
+
+        # ==============================
+        # 5. INTENÇÃO: TRAÇÃO OU CAMINHÃO
+        # ==============================
+        tracao_pedida = detectar_tracao_pedida(texto)
+
+        if tracao_pedida:
+            nomes = filtrar_caminhoes_por_tracao(tracao_pedida)
+
+            if nomes:
+                resposta = "Tem sim, patrão. No momento tenho: " + ", ".join(nomes)
+            else:
+                resposta = (
+                    "No momento não tenho dessa tração disponível, patrão. "
+                    "Mas sempre entra coisa boa."
+                )
+
+            enviar_mensagem(numero, resposta)
+            return "OK", 200
+
         caminhao_detectado = detectar_caminhao_no_texto(texto)
         if caminhao_detectado:
             sessao["caminhao_em_foco"] = caminhao_detectado
 
         # ==============================
-        # 5. PEDIDO DE FOTO / VÍDEO
+        # 6. PEDIDO DE FOTO / VÍDEO
         # ==============================
         if detectar_pedido_foto(texto):
             caminhao = sessao.get("caminhao_em_foco")
@@ -1132,11 +1189,7 @@ def webhook():
 
                 if imagens:
                     enviar_mensagem(numero, "Com certeza, patrão. Já te mando.")
-                    enviar_imagens_caminhao(
-                        numero,
-                        imagens,
-                        limite=3
-                    )
+                    enviar_imagens_caminhao(numero, imagens, limite=3)
                 else:
                     enviar_mensagem(
                         numero,
@@ -1152,7 +1205,7 @@ def webhook():
             return "OK", 200
 
         # ==============================
-        # 6. GPT (CONVERSA NORMAL)
+        # 7. GPT (CONVERSA NORMAL)
         # ==============================
         historico = sessao["historico"]
         historico.append({"role": "user", "content": texto})
@@ -1163,23 +1216,16 @@ def webhook():
             temperature=0.3
         )
 
-        mensagem = resposta.choices[0].message.content.strip()
-        mensagem = limpar_resposta_whatsapp(mensagem)
+        mensagem = limpar_resposta_whatsapp(resposta.choices[0].message.content)
 
-        if not sessao.get("caminhao_em_foco"):
-            caminhao_do_gpt = detectar_caminhao_no_texto(mensagem)
-            if caminhao_do_gpt:
-                sessao["caminhao_em_foco"] = caminhao_do_gpt
+        # Marca quando o bot pediu o nome
+        if "qual é teu nome" in mensagem.lower() or "qual é seu nome" in mensagem.lower():
+            sessao["aguardando_nome_para_transferencia"] = True
 
         sessao["resumo_para_gabriel"].append(f"Ronaldo: {mensagem}")
         historico.append({"role": "assistant", "content": mensagem})
 
-        if "gabriel" in mensagem.lower():
-            sessao["pausado_para_gabriel"] = True
-            avisar_gabriel(numero, sessao)
-
         mensagens = quebrar_em_mensagens(mensagem)
-
         for i, msg in enumerate(mensagens):
             enviar_mensagem(numero, msg)
             if i < len(mensagens) - 1:
@@ -1191,8 +1237,6 @@ def webhook():
         traceback.print_exc()
 
     return "OK", 200
-
-
 
 
 
