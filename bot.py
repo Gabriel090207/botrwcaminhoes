@@ -882,7 +882,9 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido"):
             return [
                 "No momento não tenho caminhão toco disponível.",
                 "Mas sempre entra coisa boa.",
-                "Vou te mandar o link do meu grupo pra acompanhar."
+                "Vou te mandar o link do meu grupo pra acompanhar.",
+                GRUPO_LINK
+
             ]
 
     if any(t in user_lower for t in ["6x2", "trucado", "truck"]):
@@ -897,7 +899,9 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido"):
             return [
                 "No momento não tenho caminhão trucado disponível.",
                 "Mas sempre entra coisa boa.",
-                "Vou te mandar o link do meu grupo pra acompanhar."
+                "Vou te mandar o link do meu grupo pra acompanhar.",
+                GRUPO_LINK
+
             ]
 
     if any(t in user_lower for t in ["6x4", "traçado", "tracado"]):
@@ -912,7 +916,9 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido"):
             return [
                 "No momento não tenho caminhão traçado disponível.",
                 "Mas sempre entra coisa boa.",
-                "Vou te mandar o link do meu grupo pra acompanhar."
+                "Vou te mandar o link do meu grupo pra acompanhar.",
+                GRUPO_LINK
+
             ]
 
     if any(t in user_lower for t in ["8x2", "bitruck"]):
@@ -927,7 +933,9 @@ def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido"):
             return [
                 "No momento não tenho bitruck disponível.",
                 "Mas sempre entra coisa boa.",
-                "Vou te mandar o link do meu grupo pra acompanhar."
+                "Vou te mandar o link do meu grupo pra acompanhar.",
+                GRUPO_LINK
+
             ]
 
     # =====================================================
