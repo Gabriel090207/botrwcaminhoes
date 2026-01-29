@@ -1027,6 +1027,7 @@ def avisar_gabriel(numero_cliente, sessao):
 
 
 
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.json
@@ -1062,7 +1063,7 @@ def webhook():
 
         sessao = SESSOES[numero]
 
-        # Se já transferiu, não responde mais
+        # Se já transferiu para o Gabriel, não responde mais
         if sessao.get("pausado_para_gabriel"):
             return "OK", 200
 
@@ -1083,39 +1084,48 @@ def webhook():
         # ÁUDIO
         if not texto and data.get("audio"):
             audio_url = data.get("audio", {}).get("audioUrl")
+
             if audio_url:
                 try:
                     audio_path = f"/tmp/{data.get('messageId')}.ogg"
                     r = requests.get(audio_url, timeout=10)
+
                     with open(audio_path, "wb") as f:
                         f.write(r.content)
 
                     texto = transcrever_audio(audio_path)
 
                 except Exception as e:
-                    print("Erro ao transcrever áudio:", e)
+                    print("Erro ao baixar/transcrever áudio:", e)
 
-        # FALLBACK
+            # ⚠️ Áudio inválido → responde fallback
+            if not texto:
+                enviar_mensagem(
+                    numero,
+                    "Patrão, não consegui entender muito bem o áudio. "
+                    "Se puder, manda de novo ou escreve aqui rapidinho."
+                )
+                return "OK", 200
+
+        # ==============================
+        # 4. CALLBACK VAZIO → IGNORA
+        # ==============================
         if not texto:
-            enviar_mensagem(
-                numero,
-                "Patrão, não consegui entender muito bem. "
-                "Se puder, escreve aqui rapidinho ou manda o áudio de novo."
-            )
+            # Callback sem texto nem áudio (normal do WhatsApp)
             return "OK", 200
 
         print(f">> Cliente {numero}: {texto}")
         sessao["resumo_para_gabriel"].append(f"Cliente: {texto}")
 
         # ==============================
-        # 4. DETECTA CAMINHÃO EM FOCO
+        # 5. DETECTA CAMINHÃO EM FOCO
         # ==============================
         caminhao_detectado = detectar_caminhao_no_texto(texto)
         if caminhao_detectado:
             sessao["caminhao_em_foco"] = caminhao_detectado
 
         # ==============================
-        # 5. PEDIDO DE FOTO / VÍDEO
+        # 6. PEDIDO DE FOTO / VÍDEO
         # ==============================
         if detectar_pedido_foto(texto):
             caminhao = sessao.get("caminhao_em_foco")
@@ -1136,7 +1146,7 @@ def webhook():
             return "OK", 200
 
         # ==============================
-        # 6. GPT (CONVERSA)
+        # 7. GPT (CONVERSA NORMAL)
         # ==============================
         historico = sessao["historico"]
         historico.append({"role": "user", "content": texto})
@@ -1155,27 +1165,26 @@ def webhook():
                 mensagem = f"Fala, tudo bem? Aqui é o Ronaldo, da RW Caminhões. {mensagem}"
             sessao["primeira_resposta"] = False
 
-        # Limpa pontuação e sujeira
+        # Limpa pontuação
         mensagem = limpar_resposta_whatsapp(mensagem)
 
         sessao["resumo_para_gabriel"].append(f"Ronaldo: {mensagem}")
         historico.append({"role": "assistant", "content": mensagem})
 
         # ==============================
-        # 7. DETECTA TRANSFERÊNCIA
+        # 8. TRANSFERÊNCIA PARA GABRIEL
         # ==============================
         if "gabriel" in mensagem.lower():
             sessao["pausado_para_gabriel"] = True
             avisar_gabriel(numero, sessao)
 
         # ==============================
-        # 8. QUEBRA EM VÁRIAS MENSAGENS
+        # 9. ENVIO (QUEBRA EM MENSAGENS)
         # ==============================
         mensagens = quebrar_em_mensagens(mensagem)
 
         for i, msg in enumerate(mensagens):
             enviar_mensagem(numero, msg)
-
             if i < len(mensagens) - 1:
                 time.sleep(2)
 
@@ -1185,8 +1194,6 @@ def webhook():
         traceback.print_exc()
 
     return "OK", 200
-
-
 
 
 
