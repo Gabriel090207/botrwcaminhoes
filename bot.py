@@ -58,25 +58,28 @@ if not all([INSTANCE_ID, INSTANCE_TOKEN, CLIENT_TOKEN]):
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-def gerar_contexto_caminhoes():
+def gerar_contexto_caminhoes_prompt():
     caminhoes = carregar_caminhoes()
-
-    nomes = []
+    blocos = []
 
     for c in caminhoes:
         if not c.get("ativo", True):
             continue
 
-        nome = f"{c.get('marca', '')} {c.get('modelo', '')} {c.get('ano', '')}".strip()
+        bloco = f"""
+- Marca: {c.get("marca", "Não informado")}
+  Modelo: {c.get("modelo", "Não informado")}
+  Ano: {c.get("ano", "Não informado")}
+  Tração: {c.get("tracao", "Não informado")}
+  Valor: {c.get("valor", "Não informado")}
+  Observação: {c.get("observacao", "Repasse direto")}
+"""
+        blocos.append(bloco.strip())
 
-        if nome:
-            nomes.append(nome)
-
-    if not nomes:
+    if not blocos:
         return "Nenhum caminhão disponível no momento."
 
-    return ", ".join(nomes)
-
+    return "\n\n".join(blocos)
 
 
 def filtrar_caminhoes_por_tracao(tracao_busca):
@@ -702,6 +705,98 @@ Vou te mandar o link do meu grupo pra acompanhar."
 
 Nunca responder com lista quando a pergunta for específica.
 
+
+CAMINHÕES DISPONÍVEIS — BASE ÚNICA DE VERDADE:
+
+As informações abaixo são EXATAS.
+Nunca invente dados.
+Nunca altere valores.
+Nunca misture caminhões.
+
+{gerar_contexto_caminhoes_prompt()}
+
+USO DA BASE DE CAMINHÕES (REGRA):
+
+- Sempre que o cliente mencionar marca, modelo, ano ou apelido do caminhão,
+  considere esse caminhão como DEFINIDO no contexto da conversa.
+
+- Se o caminhão já estiver claro:
+  NUNCA pergunte novamente qual caminhão é.
+
+- Quando o cliente perguntar:
+  - valor
+  - ano
+  - tração
+  - detalhes
+  responda usando SOMENTE os dados da base acima.
+
+- Se o dado não existir na base:
+  diga que prefere confirmar para não falar errado.
+
+  
+CLASSIFICAÇÃO DE CAMINHÕES (LINGUAGEM DE ESTRADA):
+
+Considere SEMPRE como equivalentes os termos abaixo.
+Isso faz parte da linguagem comum de caminhoneiro.
+
+- 3/4 (4x2 leve) → Caminhão 3/4
+- 4x2 → Caminhão Toco
+- 6x2 → Caminhão Trucado (ou Truck)
+- 6x4 → Caminhão Traçado
+- 8x2 → Caminhão Bitruck
+
+Quando o cliente usar qualquer um desses termos:
+- Interprete automaticamente a tração correspondente
+- NÃO pergunte confirmação
+- NÃO trate como dúvida
+- Use apenas como entendimento interno da conversa
+
+
+EXPLICAÇÃO TÉCNICA (USO SOMENTE SE O CLIENTE PEDIR):
+
+- 3/4 (4x2 leve): caminhão leve, geralmente até cerca de 6 toneladas, muito usado em entregas urbanas
+- 4x2 (Toco): 2 eixos, 1 eixo tracionado
+- 6x2 (Trucado/Truck): 3 eixos, 1 eixo tracionado
+- 6x4 (Traçado): 3 eixos, 2 eixos tracionados
+- 8x2 (Bitruck): 4 eixos, 1 eixo tracionado
+
+Regra:
+- NÃO explicar isso espontaneamente
+- Só explicar se o cliente perguntar o que significa, pedir diferença ou demonstrar dúvida
+- Quando explicar, usar linguagem simples e curta
+
+FORMATAÇÃO DE VALOR (REGRA ABSOLUTA):
+
+Os valores dos caminhões podem vir como número ou texto,
+com ou sem centavos, com zeros extras ou separadores.
+
+Exemplos de entrada possíveis:
+- 31000000
+- 310000.00
+- 310000,00
+- "310000"
+- "310000.00"
+
+REGRA DE RESPOSTA AO CLIENTE:
+- Ignore COMPLETAMENTE centavos
+- Ignore zeros finais desnecessários
+- Considere sempre o valor cheio em milhares
+
+Formato obrigatório de fala:
+- Use apenas "<número> mil" ou "1 milhão"
+
+Exemplos obrigatórios:
+- 31000000 / 310000.00 / "310000,00" → "310 mil"
+- 450000.00 → "450 mil"
+- 1000000 / 1000000.00 → "1 milhão"
+
+PROIBIDO:
+- mencionar centavos
+- falar "reais"
+- usar R$
+- usar formato bancário (310.000,00)
+- repetir números crus do banco
+
 OBJETIVO FINAL:
 O cliente deve sentir:
 "Aqui ninguém empurra, só fala a verdade."
@@ -722,596 +817,6 @@ IMPORTANTE:
 """
 else:
     SYSTEM_PROMPT = PROMPT_BASE
-
-
-def conversar():
-    print("Bot RW Caminhões iniciado. Digite 'sair' para encerrar.\n")
-
-    ajuste = carregar_prompt()
-
-    if ajuste:
-        system_prompt = PROMPT_BASE + "\n\nAJUSTE TEMPORÁRIO:\n" + ajuste
-    else:
-        system_prompt = PROMPT_BASE
-
-    historico = [
-        {"role": "system", "content": system_prompt}
-    ]
-
-    # ===== FLAGS DE CONTROLE =====
-    primeira_resposta = True
-    cordialidade_encerrada = False
-    caminhao_em_foco = None
-    transferido_para_gabriel = False
-
-    expressoes_cordialidade = [
-        "e com você",
-        "e com vc",
-        "e contigo",
-        "como você está",
-        "como vc está"
-    ]
-
-    gatilhos_confirmacao = [
-        "sim",
-        "quero",
-        "quero sim",
-        "me fale mais",
-        "mais detalhes",
-        "tenho interesse"
-    ]
-
-    bloqueios_rota = [
-        "tipo de rota",
-        "qual rota",
-        "tipo de viagem",
-        "uso na estrada"
-    ]
-
-    while True:
-        user_input = input("Cliente: ")
-
-        if user_input.lower() == "sair":
-            print("Encerrando atendimento.")
-            break
-
-        user_lower = user_input.lower()
-
-        # ===== DETECTA CAMINHÃO EM FOCO =====
-        for nome in gerar_contexto_caminhoes().lower().split(","):
-            nome_limpo = nome.strip()
-            if nome_limpo and nome_limpo in user_lower:
-                caminhao_em_foco = nome_limpo
-                break
-
-        historico.append({"role": "user", "content": user_input})
-
-        resposta = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=historico,
-            temperature=0.2
-        )
-
-        mensagem = resposta.choices[0].message.content.strip()
-        mensagem_lower = mensagem.lower()
-
-        # ===== ABERTURA OBRIGATÓRIA =====
-        if primeira_resposta:
-            saudacao_padrao = "Ôpa! Aqui é o Ronaldo, da RW Caminhões. "
-
-            if "rw caminhões" not in mensagem_lower and "ronaldo" not in mensagem_lower:
-                mensagem = saudacao_padrao + mensagem
-
-            primeira_resposta = False
-
-        # ===== CONTROLE DE CORDIALIDADE =====
-        if not cordialidade_encerrada:
-            for exp in expressoes_cordialidade:
-                if exp in mensagem_lower:
-                    mensagem = mensagem.replace("E com você?", "")
-                    mensagem = mensagem.replace("e com você?", "")
-                    mensagem = mensagem.strip()
-                    mensagem += " Como posso te ajudar?"
-                    cordialidade_encerrada = True
-                    break
-        else:
-            for exp in expressoes_cordialidade:
-                if exp in mensagem_lower:
-                    mensagem = mensagem.split("?")[0].strip()
-
-        # ===== BLOQUEIO DE PERGUNTAS DE ROTA =====
-        for b in bloqueios_rota:
-            if b in mensagem_lower:
-                mensagem = (
-                    "É um caminhão forte e bem alinhado pra proposta de repasse, "
-                    "sem maquiagem. Quer dar uma olhada melhor nele?"
-                )
-                break
-
-        # ===== EVITA RELISTAR CAMINHÕES QUANDO JÁ HÁ FOCO =====
-        if caminhao_em_foco:
-            for g in gatilhos_confirmacao:
-                if g in user_lower:
-                    mensagem = (
-                        "É um caminhão bem comprado, de repasse direto, "
-                        "sem maquiagem. Quer que eu te mostre melhor ele?"
-                    )
-                    break
-
-        # ===== MARCA TRANSFERÊNCIA =====
-        if "gabriel" in mensagem_lower and "colocar" in mensagem_lower:
-            transferido_para_gabriel = True
-
-        print(f"\nRonaldo: {mensagem}\n")
-
-        historico.append({"role": "assistant", "content": mensagem})
-
-
-import re
-
-def limpar_texto_whatsapp(texto):
-    # Remove excesso de vírgulas
-    texto = re.sub(r",\s*,+", ", ", texto)
-    texto = re.sub(r"\s+,", ",", texto)
-
-    # Evita frases longas com várias vírgulas
-    texto = texto.replace(", e ", ". ")
-    texto = texto.replace(", mas ", ". ")
-    texto = texto.replace(", porque ", ". ")
-
-    return texto.strip()
-
-
-import re
-
-def normalizar_pontuacao(texto):
-    import re
-
-    texto = texto.strip()
-
-    # Remove combinações erradas tipo "!.," ",." "!!"
-    texto = re.sub(r'([!?.,]){2,}', r'\1', texto)
-
-    # Remove vírgula ou ponto no FINAL da frase
-    texto = re.sub(r'[.,]+$', '', texto)
-
-    # Remove exclamação no final
-    texto = re.sub(r'!$', '', texto)
-
-    # Mantém interrogação se for pergunta
-    # (não faz nada aqui, só garante que não remove)
-
-    # Espaços duplicados
-    texto = re.sub(r'\s{2,}', ' ', texto)
-
-    return texto.strip()
-
-
-
-def extrair_link(texto, data=None):
-    # 1️⃣ Tenta extrair link do texto
-    if texto:
-        regex = r"(https?://[^\s]+)"
-        match = re.search(regex, texto)
-        if match:
-            return match.group(1)
-
-    # 2️⃣ Fallback: preview de anúncio do WhatsApp
-    if data:
-        preview_url = data.get("linkPreview", {}).get("canonicalUrl")
-        if preview_url:
-            return preview_url
-
-    return None
-
-def identificar_caminhao_por_texto(texto):
-    caminhoes = carregar_caminhoes()
-    texto_lower = texto.lower()
-
-    for c in caminhoes:
-        if not c.get("ativo", True):
-            continue
-
-        nome = f"{c.get('marca', '')} {c.get('modelo', '')} {c.get('ano', '')}".lower()
-
-        if nome and nome in texto_lower:
-            return c
-
-    return None
-
-
-
-def quebrar_em_mensagens(texto, max_frases=2):
-    frases = re.split(r'(?<=[.?])\s+', texto)
-    mensagens = []
-    bloco = []
-
-    for frase in frases:
-        if not frase:
-            continue
-
-        bloco.append(frase)
-
-        if len(bloco) >= max_frases:
-            mensagens.append(" ".join(bloco).strip())
-            bloco = []
-
-    if bloco:
-        mensagens.append(" ".join(bloco).strip())
-
-    return mensagens
-
-
-def remover_reapresentacao(texto):
-    substituicoes = [
-        "sou o ronaldo, do atendimento da rw caminhões",
-        "sou o ronaldo do atendimento da rw caminhões",
-        "sou o ronaldo",
-        "aqui é o ronaldo",
-        "ronaldo, da rw caminhões",
-        "da rw caminhões"
-    ]
-
-    texto_lower = texto.lower()
-
-    for s in substituicoes:
-        if s in texto_lower:
-            idx = texto_lower.find(s)
-            texto = texto[:idx] + texto[idx + len(s):]
-            texto_lower = texto.lower()
-
-    return texto.strip(" ,.-\n")
-
-
-def obter_tracao_caminhao_em_foco(mensagem_cliente):
-    caminhoes = carregar_caminhoes()
-    texto = mensagem_cliente.lower()
-
-    for c in caminhoes:
-        if not c.get("ativo", True):
-            continue
-
-        nome = f"{c.get('marca', '')} {c.get('modelo', '')} {c.get('ano', '')}".strip().lower()
-
-        if nome and nome in texto:
-            return {
-                "nome": nome,
-                "tracao": c.get("tracao")
-            }
-
-    return None
-
-
-MAPA_TRACAO = {
-    "toco": "4x2",
-    "4x2": "4x2",
-    "truck": "6x2",
-    "6x2": "6x2",
-    "traçado": "6x4",
-    "tracado": "6x4",
-    "6x4": "6x4"
-}
-
-
-def processar_mensagem(mensagem_cliente, numero_cliente="desconhecido", data=None):
-    user_lower = mensagem_cliente.lower().strip()
-
-    # =====================================================
-    # CRIA SESSÃO
-    # =====================================================
-    if numero_cliente not in SESSOES:
-        ajuste = carregar_prompt()
-        system_prompt = PROMPT_BASE + ("\n\nAJUSTE TEMPORÁRIO:\n" + ajuste if ajuste else "")
-
-        SESSOES[numero_cliente] = {
-            "historico": [{"role": "system", "content": system_prompt}],
-            "primeira_resposta": True,
-            "ultima_mensagem_cliente": datetime.now(),
-            "remarketing_enviado": False,
-            "pausado_para_gabriel": False,
-            "aguardando_nome": False,
-            "nome_cliente": None,
-            "resumo_para_gabriel": [],
-            "caminhao_em_foco": None
-        }
-
-    sessao = SESSOES[numero_cliente]
-
-    if sessao["pausado_para_gabriel"]:
-        return None
-
-    sessao["ultima_mensagem_cliente"] = datetime.now()
-    sessao["remarketing_enviado"] = False
-
-    # =====================================================
-    # DETECTA SAUDAÇÃO DO CLIENTE
-    # =====================================================
-    cliente_saudou = any(
-        s in user_lower for s in ["bom dia", "boa tarde", "boa noite", "opa", "fala", "oi", "olá"]
-    )
-
-    def aplicar_saudacao(texto):
-        texto = texto.strip()
-
-        if sessao["primeira_resposta"]:
-            sessao["primeira_resposta"] = False
-
-            if cliente_saudou:
-                return texto
-
-            return f"Fala, tudo bem? Aqui é o Ronaldo, da RW Caminhões. {texto}".strip()
-
-        return texto
-
-    # =====================================================
-    # IDENTIFICA CAMINHÃO EM FOCO (ANTES DE QUALQUER RESPOSTA)
-    # =====================================================
-    if not sessao["caminhao_em_foco"]:
-        caminhao = identificar_caminhao_por_texto(mensagem_cliente)
-        if caminhao:
-            sessao["caminhao_em_foco"] = caminhao
-
-    caminhao = sessao.get("caminhao_em_foco")
-
-    # =====================================================
-    # PEDIDO DE FOTOS (PRIORIDADE ABSOLUTA)
-    # =====================================================
-    if any(p in user_lower for p in ["foto", "fotos", "imagem", "imagens"]):
-        if caminhao and caminhao.get("imagens"):
-            enviar_imagens_caminhao(
-                numero_cliente,
-                caminhao["imagens"],
-                limite=3
-            )
-            return aplicar_saudacao("Com certeza, patrão. Já te mando as fotos")
-
-        if caminhao:
-            return aplicar_saudacao(
-                "Consigo sim, patrão. Só estou conferindo as fotos certinho e já te mando"
-            )
-
-        return aplicar_saudacao(
-            "Consigo sim, patrão. Só me confirma qual caminhão você quer ver"
-        )
-
-    # =====================================================
-    # VALOR (RESPONDE DIRETO SE EXISTIR)
-    # =====================================================
-    if any(v in user_lower for v in ["valor", "preço", "quanto", "custa"]):
-        if caminhao and caminhao.get("valor"):
-            return aplicar_saudacao(
-                f"Esse tá por R$ {caminhao['valor']}. Caminhão de repasse direto, sem maquiagem"
-            )
-
-        return aplicar_saudacao(
-            "Esse valor eu prefiro confirmar certinho pra não te falar errado. Já confiro pra você"
-        )
-
-    # =====================================================
-    # INTERESSE EM FECHAR
-    # =====================================================
-    if any(i in user_lower for i in ["quero fechar", "vamos fechar", "quero comprar"]):
-        sessao["aguardando_nome"] = True
-        sessao["resumo_para_gabriel"].append(f"Interesse em fechar: {mensagem_cliente}")
-        return aplicar_saudacao(
-            "Perfeito, patrão. Só pra eu te apresentar certinho pro Gabriel, qual é teu nome?"
-        )
-
-    # =====================================================
-    # NEGOCIAÇÃO
-    # =====================================================
-    if any(n in user_lower for n in ["desconto", "negocia", "melhora o preço", "faz por menos"]):
-        sessao["aguardando_nome"] = True
-        sessao["resumo_para_gabriel"].append(f"Pedido de negociação: {mensagem_cliente}")
-        return aplicar_saudacao(
-            "Entendo, patrão. Isso eu prefiro alinhar direto com o Gabriel. Qual é teu nome?"
-        )
-
-    # =====================================================
-    # GPT (FALLBACK)
-    # =====================================================
-    historico = sessao["historico"]
-    historico.append({"role": "user", "content": mensagem_cliente})
-
-    resposta = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=historico,
-        temperature=0.2
-    )
-
-    mensagem = resposta.choices[0].message.content.strip()
-    mensagem = remover_reapresentacao(mensagem)
-    mensagem = limpar_texto_whatsapp(mensagem)
-    mensagem = normalizar_pontuacao(mensagem)
-    mensagem = aplicar_saudacao(mensagem)
-
-    historico.append({"role": "assistant", "content": mensagem})
-
-    return quebrar_em_mensagens(mensagem)
-
-
-def avisar_gabriel(numero_cliente, sessao):
-    nome = sessao.get("nome_cliente") or "Não informado"
-
-    resumo = "\n".join([f"- {msg}" for msg in sessao.get("resumo_para_gabriel", [])])
-    if not resumo:
-        resumo = "- (sem resumo)"
-
-    texto_gabriel = (
-        "🔔 *NOVO LEAD (TRANSFERIDO)*\n\n"
-        f"📞 *Telefone:* {numero_cliente}\n"
-        f"👤 *Nome:* {nome}\n\n"
-        f"📝 *Resumo:*\n{resumo}\n\n"
-        "✅ Bot pausado para esse cliente."
-    )
-
-    # Envia para o WhatsApp do Gabriel
-    try:
-        enviar_mensagem(NUMERO_GABRIEL, texto_gabriel)
-    except Exception as e:
-        print("Erro ao avisar Gabriel:", e)
-
-    # Log local (continua ajudando no debug)
-    print("\n🔔 REPASSE PARA O GABRIEL")
-    print("Telefone:", numero_cliente)
-    print("Nome:", nome)
-    print("Resumo do interesse:")
-    for msg in sessao.get("resumo_para_gabriel", []):
-        print("-", msg)
-    print("🔕 Bot pausado para este cliente\n")
-
-
-
-def enviar_digitando(numero):
-    try:
-        url = f"https://api.z-api.io/instances/{INSTANCE_ID}/token/{INSTANCE_TOKEN}/send-status-typing"
-        headers = {"Client-Token": CLIENT_TOKEN}
-        requests.post(url, headers=headers, timeout=5)
-    except:
-        pass
-
-
-def enviar_mensagem(numero, texto):
-    url = f"https://api.z-api.io/instances/{INSTANCE_ID}/token/{INSTANCE_TOKEN}/send-text"
-    headers = {
-        "Client-Token": CLIENT_TOKEN,
-        "Content-Type": "application/json"
-    }
-    payload = {"phone": numero, "message": texto}
-    requests.post(url, json=payload, headers=headers, timeout=10)
-
-
-def transcrever_audio(caminho_audio):
-    try:
-        with open(caminho_audio, "rb") as audio_file:
-            transcript = client.audio.transcriptions.create(
-                model="gpt-4o-transcribe",
-                file=audio_file
-            )
-        return transcript.text.strip()
-    except Exception as e:
-        print("Erro ao transcrever áudio:", e)
-        return None
-
-
-ULTIMAS_MENSAGENS = []
-
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    data = request.json
-    print("WEBHOOK RECEBIDO:", data)
-
-    try:
-        msg_id = data.get("messageId")
-
-        if not msg_id:
-            return "OK", 200
-
-        if msg_id in ULTIMAS_MENSAGENS:
-            return "OK", 200
-
-        ULTIMAS_MENSAGENS.append(msg_id)
-
-        if data.get("type") != "ReceivedCallback":
-            return "OK", 200
-
-        if data.get("fromMe") is True:
-            return "OK", 200
-
-        numero = data.get("phone")
-
-        texto = None
-
-        # ========= TEXTO =========
-        if isinstance(data.get("text"), dict):
-            texto = data.get("text", {}).get("message")
-        elif isinstance(data.get("text"), str):
-            texto = data.get("text")
-
-        if not texto:
-            texto = data.get("body") or data.get("message") or data.get("caption")
-
-        # ========= ÁUDIO =========
-        if not texto and data.get("audio"):
-            audio_url = data.get("audio", {}).get("audioUrl")
-
-            if audio_url:
-                try:
-                    audio_path = f"/tmp/{msg_id}.ogg"
-                    r = requests.get(audio_url, timeout=10)
-
-                    with open(audio_path, "wb") as f:
-                        f.write(r.content)
-
-                    texto = transcrever_audio(audio_path)
-
-                except Exception as e:
-                    print("Erro ao baixar/transcrever áudio:", e)
-
-        # ========= FALLBACK DE ÁUDIO =========
-        if not texto:
-            enviar_mensagem(
-                numero,
-                "Patrão, não consegui entender muito bem o áudio. "
-                "Se puder, me manda de novo ou escreve aqui rapidinho."
-            )
-            return "OK", 200
-
-        print(f">> Cliente {numero}: {texto}")
-
-        respostas = processar_mensagem(texto, numero, data)
-
-
-        # 🔕 Se a conversa foi transferida, nunca mais responder
-        if respostas is None:
-            return "OK", 200
-
-
-        if isinstance(respostas, str):
-            respostas = [respostas]
-
-        for i, msg in enumerate(respostas):
-            enviar_digitando(numero)
-            enviar_mensagem(numero, msg)
-
-            # Delay de 15s entre mensagens
-            if i < len(respostas) - 1:
-                time.sleep(5)
-
-
-
-    except Exception as e:
-        import traceback
-        print("ERRO NO WEBHOOK:", e)
-        traceback.print_exc()
-
-    return "OK", 200
-
-
-def verificar_remarketing():
-    agora = datetime.now()
-
-    for numero, sessao in SESSOES.items():
-        ultima = sessao.get("ultima_mensagem_cliente")
-        ja_enviado = sessao.get("remarketing_enviado")
-
-        # Nunca faz remarketing se já foi transferido
-        if sessao.get("pausado_para_gabriel"):
-            continue
-
-
-        if not ultima or ja_enviado:
-            continue
-
-        if agora - ultima >= timedelta(hours=24):
-            mensagem = (
-                "Fala, meu amigo. Falamos daquele caminhão e fiquei no aguardo do teu retorno. "
-                "Se ficou alguma dúvida ou quiser negociar, é só me chamar."
-            )
-
-            enviar_mensagem(numero, mensagem)
-            sessao["remarketing_enviado"] = True
-
 
 
 
