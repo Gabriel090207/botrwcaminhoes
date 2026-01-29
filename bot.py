@@ -1135,26 +1135,32 @@ def webhook():
         if detectar_pedido_foto(texto):
             caminhao = sessao.get("caminhao_em_foco")
 
-            if caminhao:
-                if caminhao.get("imagens"):
-                    enviar_mensagem(numero, "Com certeza, patrão. Já te mando.")
-                    enviar_imagens_caminhao(
-                        numero,
-                        caminhao["imagens"],
-                        limite=3
-                    )
-                else:
-                    enviar_mensagem(
-                        numero,
-                        "Com certeza, patrão. Vou verificar as fotos certinho e já te retorno."
-                    )
-                return "OK", 200
+        # 🔒 REGRA ABSOLUTA: se já tem caminhão em foco, manda foto
+        if caminhao:
+            imagens = caminhao.get("imagens") or []
 
-            enviar_mensagem(
-                numero,
-                "Consigo sim, patrão. Só me diz qual caminhão você quer ver."
-            )
+            if imagens:
+                enviar_mensagem(numero, "Com certeza, patrão. Já te mando.")
+                enviar_imagens_caminhao(
+                    numero,
+                    imagens,
+                    limite=3
+                )
+            else:
+                enviar_mensagem(
+                    numero,
+                    "Patrão, esse caminhão ainda não tem fotos cadastradas. "
+                    "Já vou verificar certinho e te retorno."
+                )
             return "OK", 200
+
+        # ❓ Só pergunta qual caminhão se REALMENTE não houver foco
+        enviar_mensagem(
+            numero,
+            "Consigo sim, patrão. Qual caminhão você quer ver?"
+        )
+        return "OK", 200
+
 
         # ==============================
         # 7. GPT (CONVERSA NORMAL)
