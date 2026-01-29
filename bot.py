@@ -1027,7 +1027,6 @@ def avisar_gabriel(numero_cliente, sessao):
 
 
 
-
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.json
@@ -1063,7 +1062,6 @@ def webhook():
 
         sessao = SESSOES[numero]
 
-        # Se já transferiu para o Gabriel, não responde mais
         if sessao.get("pausado_para_gabriel"):
             return "OK", 200
 
@@ -1080,7 +1078,6 @@ def webhook():
         if not texto:
             texto = data.get("body") or data.get("message") or data.get("caption")
 
-        # ÁUDIO
         if not texto and data.get("audio"):
             audio_url = data.get("audio", {}).get("audioUrl")
 
@@ -1088,12 +1085,9 @@ def webhook():
                 try:
                     audio_path = f"/tmp/{data.get('messageId')}.ogg"
                     r = requests.get(audio_url, timeout=10)
-
                     with open(audio_path, "wb") as f:
                         f.write(r.content)
-
                     texto = transcrever_audio(audio_path)
-
                 except Exception as e:
                     print("Erro ao baixar/transcrever áudio:", e)
 
@@ -1115,14 +1109,14 @@ def webhook():
         sessao["resumo_para_gabriel"].append(f"Cliente: {texto}")
 
         # ==============================
-        # 5. DETECTA CAMINHÃO EM FOCO
+        # 5. DETECTA CAMINHÃO PELO TEXTO DO CLIENTE
         # ==============================
         caminhao_detectado = detectar_caminhao_no_texto(texto)
         if caminhao_detectado:
             sessao["caminhao_em_foco"] = caminhao_detectado
 
         # ==============================
-        # 6. PEDIDO DE FOTO / VÍDEO (CORRIGIDO)
+        # 6. PEDIDO DE FOTO / VÍDEO (FIX FINAL)
         # ==============================
         if detectar_pedido_foto(texto):
             caminhao = sessao.get("caminhao_em_foco")
@@ -1161,14 +1155,21 @@ def webhook():
         )
 
         mensagem = resposta.choices[0].message.content.strip()
-
-        # Primeira saudação (uma única vez)
-        if sessao["primeira_resposta"]:
-            if "ronaldo" not in mensagem.lower():
-                mensagem = f"Fala, tudo bem? Aqui é o Ronaldo, da RW Caminhões. {mensagem}"
-            sessao["primeira_resposta"] = False
-
         mensagem = limpar_resposta_whatsapp(mensagem)
+
+        # ==============================
+        # 7.1 FIXA CAMINHÃO SE O GPT DEFINIU
+        # ==============================
+        if not sessao.get("caminhao_em_foco"):
+            caminhao_do_gpt = detectar_caminhao_no_texto(mensagem)
+            if caminhao_do_gpt:
+                sessao["caminhao_em_foco"] = caminhao_do_gpt
+
+        # ==============================
+        # 7.2 PRIMEIRA RESPOSTA (SEM FALLBACK)
+        # ==============================
+        if sessao["primeira_resposta"]:
+            sessao["primeira_resposta"] = False
 
         sessao["resumo_para_gabriel"].append(f"Ronaldo: {mensagem}")
         historico.append({"role": "assistant", "content": mensagem})
@@ -1196,6 +1197,8 @@ def webhook():
         traceback.print_exc()
 
     return "OK", 200
+
+
 
 
 
