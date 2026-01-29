@@ -1045,6 +1045,13 @@ def webhook():
         numero = data.get("phone")
         if not numero:
             return "OK", 200
+        
+        message_id = data.get("messageId") or data.get("id")
+
+        if message_id:
+            if numero in SESSOES and message_id in SESSOES[numero]["mensagens_processadas"]:
+                return "OK", 200
+
 
         # ==============================
         # 2. GARANTE SESSÃO
@@ -1057,13 +1064,20 @@ def webhook():
                 ],
                 "primeira_resposta": True,
                 "pausado_para_gabriel": False,
-                "resumo_para_gabriel": []
+                "resumo_para_gabriel": [],
+                "mensagens_processadas": set(),
+
             }
 
         sessao = SESSOES[numero]
 
         if sessao.get("pausado_para_gabriel"):
             return "OK", 200
+        
+
+        if message_id:
+            sessao["mensagens_processadas"].add(message_id)
+
 
         # ==============================
         # 3. EXTRAI TEXTO / ÁUDIO
