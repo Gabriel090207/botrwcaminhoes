@@ -1,68 +1,51 @@
 import os
 import time
+import base64
 import requests
-from dotenv import load_dotenv
 
-load_dotenv()
+INSTANCE_ID = os.getenv("ZAPI_INSTANCE_ID")
+INSTANCE_TOKEN = os.getenv("ZAPI_INSTANCE_TOKEN")
+CLIENT_TOKEN = os.getenv("ZAPI_CLIENT_TOKEN")
 
-def enviar_imagens_caminhao(numero, imagens, limite=20):
+
+def enviar_imagens_caminhao(numero, imagens, limite=3):
     """
-    Envia imagens do caminhão UMA POR VEZ via Z-API,
-    garantindo que o WhatsApp renderize corretamente.
-    Lê as credenciais diretamente do .env:
-    - ZAPI_INSTANCE_ID
-    - ZAPI_INSTANCE_TOKEN
-    - ZAPI_CLIENT_TOKEN
+    Envia imagens do caminhão via Z-API usando BASE64
+    (forma mais confiável para WhatsApp).
     """
-
-    instance_id = os.getenv("ZAPI_INSTANCE_ID")
-    instance_token = os.getenv("ZAPI_INSTANCE_TOKEN")
-    client_token = os.getenv("ZAPI_CLIENT_TOKEN")
-
-    if not all([instance_id, instance_token, client_token]):
-        print("Erro: variáveis Z-API não configuradas no .env")
-        return
 
     if not imagens:
-        return
+        return False
 
-    url = f"https://api.z-api.io/instances/{instance_id}/token/{instance_token}/send-image"
+    imagens = imagens[:limite]
 
+    url = f"https://api.z-api.io/instances/{INSTANCE_ID}/token/{INSTANCE_TOKEN}/send-image"
     headers = {
-        "Client-Token": client_token,
+        "Client-Token": CLIENT_TOKEN,
         "Content-Type": "application/json"
     }
 
-    enviados = 0
-
     for img_url in imagens:
-        if enviados >= limite:
-            break
-
-        if not isinstance(img_url, str):
-            continue
-
-        if not img_url.startswith("http"):
-            continue
-
-        payload = {
-            "phone": numero,
-            "image": img_url
-        }
-
         try:
-            response = requests.post(
-                url,
-                json=payload,
-                headers=headers,
-                timeout=15
-            )
+            # baixa a imagem
+            r = requests.get(img_url, timeout=15)
+            if r.status_code != 200:
+                print("Erro ao baixar imagem:", img_url)
+                continue
 
-            if response.status_code != 200:
-                print("Erro ao enviar imagem:", response.text)
+            # converte para base64
+            img_base64 = base64.b64encode(r.content).decode("utf-8")
 
-            enviados += 1
-            time.sleep(1.5)
+            payload = {
+                "phone": numero,
+                "image": img_base64
+            }
+
+            requests.post(url, json=payload, headers=headers, timeout=10)
+
+            time.sleep(1.5)  # evita agrupamento
 
         except Exception as e:
             print("Erro ao enviar imagem:", e)
+
+    return True

@@ -907,65 +907,138 @@ def detectar_pedido_foto(texto: str) -> bool:
     t = (texto or "").lower()
     return any(p in t for p in PALAVRAS_FOTO)
 
-def detectar_caminhao_no_texto(texto, caminhoes_base):
-    """
-    Detecta caminhão mesmo com nome incompleto.
-    Ex:
-    - 'daf 510'
-    - 'daf xf 510 2017'
-    - '510 6x4'
-    """
 
-    if not texto:
-        return None
+def detectar_caminhao_no_texto(texto, caminhoes):
+    texto = texto.lower()
 
-    t = texto.lower()
-
-    for c in caminhoes_base:
-        if not c.get("ativo", True):
-            continue
-
-        pontos = 0
-
+    for c in caminhoes:
         marca = (c.get("marca") or "").lower()
         modelo = (c.get("modelo") or "").lower()
-        ano = str(c.get("ano") or "")
         tracao = (c.get("tracao") or "").lower()
+        ano = str(c.get("ano") or "")
 
-        # 🔹 Marca (DAF, Volvo, Scania)
-        if marca and marca in t:
-            pontos += 2
+        palavras_modelo = modelo.split()
 
-        # 🔹 Potência / número principal (510, 460, 440 etc)
-        numeros = [n for n in modelo.split() if n.isdigit()]
-        for n in numeros:
-            if n in t:
-                pontos += 3
-                break
-
-        # 🔹 Ano
-        if ano and ano in t:
-            pontos += 1
-
-        # 🔹 Tração por apelido
-        MAPA_TRACAO = {
-            "toco": "4x2",
-            "truck": "6x2",
-            "trucado": "6x2",
-            "traçado": "6x4",
-            "tracado": "6x4",
-            "bitruck": "8x2"
-        }
-
-        for apelido, tr in MAPA_TRACAO.items():
-            if apelido in t and tr == tracao:
-                pontos += 1
-
-        # 🎯 REGRA FINAL MAIS INTELIGENTE
-        if pontos >= 3:
+        # regra principal: qualquer número ou palavra-chave do modelo
+        if (
+            marca in texto
+            and any(p in texto for p in palavras_modelo)
+        ):
             return c
 
+        # aceita só o número (ex: "510", "460")
+        for p in palavras_modelo:
+            if p.isdigit() and p in texto:
+                return c
+
     return None
+
+
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    data = request.json
+    print("WEBHOOK RECEBIDO:", data)
+
+    try:
+        # ==============================
+        # 1. FILTROS BÁSICOS
+        # ==============================
+        if not data or data.get("fromMe"):
+            return "OK", 200
+
+        numero = data.get("phone")
+        if not numero:
+            return "OK", 200
+
+        texto = (
+            data.get("text", {}).get("message")
+            if isinstance(data.get("text"), dict)
+            else data.get("text")
+        ) or data.get("body") or data.get("message") or data.get("caption")
+
+        if not texto:
+            return "OK", 200
+
+        texto_lower = texto.lower()
+        print(f">> Cliente {numero}: {texto}")
+
+        # ==============================
+        # 2. GARANTE SESSÃO
+        # ==============================
+        if numero not in SESSOES:
+            SESSOES[numero] = {
+                "caminhao_em_foco": None,
+                "caminhoes_base": carregar_caminhoes(),
+            }
+
+        sessao = SESSOES[numero]
+
+        # ==============================
+        # 3. DETECTA CAMINHÃO (SEMPRE)
+        # ==============================
+        caminhao_detectado = detectar_caminhao_no_texto(
+            texto,
+            sessao["caminhoes_base"]
+        )
+
+        if caminhao_detectado:
+            sessao["caminhao_em_foco"] = caminhao_detectado
+
+        # ==============================
+        # 4. FOTO (PRIORIDADE ABSOLUTA)
+        # ==============================
+        if detectar_pedido_foto(texto):
+            caminhao = sessao.get("caminhao_em_foco")
+
+            if not caminhao:
+                enviar_mensagem(
+                    numero,
+                    "Qual caminhão você quer ver as fotos, patrão?"
+                )
+                return "OK", 200
+
+            imagens = caminhao.get("imagens") or []
+
+            if not imagens:
+                enviar_mensagem(
+                    numero,
+                    "Esse caminhão não tem fotos no momento, patrão."
+                )
+                return "OK", 200
+
+            enviar_mensagem(numero, "Com certeza, patrão. Já te mando.")
+            enviar_imagens_caminhao(numero, imagens, limite=3)
+            return "OK", 200
+
+        # ==============================
+        # 5. SE TEM FOCO → RESPONDE SOBRE ELE
+        # ==============================
+        if sessao.get("caminhao_em_foco"):
+            c = sessao["caminhao_em_foco"]
+
+            enviar_mensagem(
+                numero,
+                f"Tenho sim, patrão. É um {c['marca']} {c['modelo']} "
+                f"{c['tracao']} {c['ano']}, caminhão forte e econômico."
+            )
+            return "OK", 200
+
+        # ==============================
+        # 6. SE NÃO DETECTOU NADA → AÍ SIM DIZ QUE NÃO TEM
+        # ==============================
+        enviar_mensagem(
+            numero,
+            "No momento não tenho esse modelo específico, patrão. "
+            "Mas sempre entra coisa boa."
+        )
+
+    except Exception as e:
+        import traceback
+        print("ERRO NO WEBHOOK:", e)
+        traceback.print_exc()
+
+    return "OK", 200
+
 
 
 def enviar_mensagem(numero, texto):
@@ -1056,207 +1129,6 @@ def atualizar_base_caminhoes_seguranca(sessao):
     except Exception as e:
         print("Erro ao atualizar base de caminhões:", e)
 
-
-
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    data = request.json
-    print("WEBHOOK RECEBIDO:", data)
-
-    try:
-        # ==============================
-        # 1. FILTROS BÁSICOS
-        # ==============================
-        if not data or data.get("fromMe"):
-            return "OK", 200
-
-        numero = data.get("phone")
-        if not numero:
-            return "OK", 200
-
-        message_id = data.get("messageId") or data.get("id")
-
-        if numero in SESSOES and message_id:
-            if message_id in SESSOES[numero].get("mensagens_processadas", set()):
-                return "OK", 200
-
-        # ==============================
-        # 2. GARANTE SESSÃO
-        # ==============================
-        if numero not in SESSOES:
-            SESSOES[numero] = {
-                "caminhao_em_foco": None,
-                "caminhoes_base": carregar_caminhoes(),
-                "historico": [{"role": "system", "content": SYSTEM_PROMPT}],
-                "primeira_resposta": True,
-                "pausado_para_gabriel": False,
-                "aguardando_nome_para_transferencia": False,
-                "resumo_para_gabriel": [],
-                "mensagens_processadas": set(),
-            }
-
-        sessao = SESSOES[numero]
-        atualizar_base_caminhoes_seguranca(sessao)
-
-        if sessao["pausado_para_gabriel"]:
-            return "OK", 200
-
-        if message_id:
-            sessao["mensagens_processadas"].add(message_id)
-
-        # ==============================
-        # 3. TEXTO / ÁUDIO
-        # ==============================
-        texto = (
-            data.get("text", {}).get("message")
-            if isinstance(data.get("text"), dict)
-            else data.get("text")
-        ) or data.get("body") or data.get("message") or data.get("caption")
-
-        if not texto:
-            return "OK", 200
-
-        print(f">> Cliente {numero}: {texto}")
-        sessao["resumo_para_gabriel"].append(f"Cliente: {texto}")
-
-        texto_lower = texto.lower()
-
-        # ==============================
-        # 4. RECEBE NOME
-        # ==============================
-        if sessao["aguardando_nome_para_transferencia"]:
-            nome = texto.strip().split()[0].capitalize()
-
-            enviar_mensagem(
-                numero,
-                f"Valeu, {nome}! 👍 O Gabriel vai entrar em contato contigo pra alinhar certinho."
-            )
-
-            sessao["aguardando_nome_para_transferencia"] = False
-            sessao["pausado_para_gabriel"] = True
-            avisar_gabriel(numero, sessao)
-            return "OK", 200
-
-        # ==============================
-        # 5. DETECTA CAMINHÃO ESPECÍFICO
-        # ==============================
-        caminhao_detectado = detectar_caminhao_no_texto(
-            texto,
-            sessao["caminhoes_base"]
-        )
-
-        if caminhao_detectado:
-            sessao["caminhao_em_foco"] = caminhao_detectado
-
-        # ==============================
-        # 6. BUSCA GENÉRICA POR MODELO (EX: "tem daf 510?")
-        # ==============================
-        if (
-            "daf" in texto_lower
-            and "510" in texto_lower
-            and not sessao.get("caminhao_em_foco")
-        ):
-            encontrados = [
-                c for c in sessao["caminhoes_base"]
-                if c.get("ativo", True)
-                and "510" in (c.get("modelo") or "")
-            ]
-
-            if encontrados:
-                nomes = [
-                    f"{c.get('marca')} {c.get('modelo')} {c.get('ano')} {c.get('tracao')}"
-                    for c in encontrados
-                ]
-
-                enviar_mensagem(
-                    numero,
-                    "Tem sim, patrão. No momento tenho: " + ", ".join(nomes)
-                )
-
-                if len(encontrados) == 1:
-                    sessao["caminhao_em_foco"] = encontrados[0]
-
-                return "OK", 200
-
-        # ==============================
-        # 7. TRAÇÃO (SÓ SE NÃO HOUVER FOCO)
-        # ==============================
-        tracao = detectar_tracao_pedida(texto)
-
-        if tracao and not sessao.get("caminhao_em_foco"):
-            encontrados = [
-                c for c in sessao["caminhoes_base"]
-                if c.get("ativo", True) and c.get("tracao") == tracao
-            ]
-
-            if encontrados:
-                nomes = [
-                    f"{c.get('marca')} {c.get('modelo')} {c.get('ano')}"
-                    for c in encontrados
-                ]
-
-                enviar_mensagem(
-                    numero,
-                    "Tem sim, patrão. No momento tenho: " + ", ".join(nomes)
-                )
-
-                if len(encontrados) == 1:
-                    sessao["caminhao_em_foco"] = encontrados[0]
-
-            else:
-                enviar_mensagem(
-                    numero,
-                    "No momento não tenho dessa tração disponível, patrão. "
-                    "Mas sempre entra coisa boa."
-                )
-
-            return "OK", 200
-
-        # ==============================
-        # 8. FOTO / VÍDEO
-        # ==============================
-        if detectar_pedido_foto(texto):
-            caminhao = sessao.get("caminhao_em_foco")
-
-            if caminhao:
-                imagens = caminhao.get("imagens") or []
-                enviar_mensagem(numero, "Com certeza, patrão. Já te mando.")
-                if imagens:
-                    enviar_imagens_caminhao(numero, imagens, limite=20)
-                return "OK", 200
-
-        # ==============================
-        # 9. GPT (SÓ TEXTO, SEM DECIDIR DISPONIBILIDADE)
-        # ==============================
-        historico = sessao["historico"]
-        historico.append({"role": "user", "content": texto})
-
-        resposta = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=historico,
-            temperature=0.3
-        )
-
-        mensagem = limpar_resposta_whatsapp(resposta.choices[0].message.content)
-
-        sessao["resumo_para_gabriel"].append(f"Ronaldo: {mensagem}")
-        historico.append({"role": "assistant", "content": mensagem})
-
-        mensagens = quebrar_em_mensagens(mensagem)
-        limite = 2 if sessao["primeira_resposta"] else 1
-
-        for msg in mensagens[:limite]:
-            enviar_mensagem(numero, msg)
-            time.sleep(1)
-
-        sessao["primeira_resposta"] = False
-
-    except Exception as e:
-        import traceback
-        print("ERRO NO WEBHOOK:", e)
-        traceback.print_exc()
-
-    return "OK", 200
 
 
 
