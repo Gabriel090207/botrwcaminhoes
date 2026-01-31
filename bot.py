@@ -1046,6 +1046,31 @@ def webhook():
         if numero in SESSOES and message_id:
             if message_id in SESSOES[numero].get("mensagens_processadas", set()):
                 return "OK", 200
+            
+
+        texto_lower = texto.lower()
+        print(f">> Cliente {numero}: {texto}")
+
+
+        # ==============================
+        # PERGUNTA SOBRE CONJUNTO
+        # ==============================
+        if any(p in texto_lower for p in ["conjunto", "carreta", "cavalo com carreta"]):
+            enviar_mensagem(
+                numero,
+                "Camarada, no momento tô mais focado nos caminhões. "
+                "Mas posso ir vendo se aparece algum conjunto."
+            )
+
+            enviar_mensagem(
+                numero,
+                "Vou te mandar o link do meu grupo pra acompanhar:\n"
+                "https://chat.whatsapp.com/F69FL3ligTJGPRAJfKsQaW?mode=gi_t"
+            )
+
+            return "OK", 200
+
+
 
         # ==============================
         # 2. GARANTE SESSÃO
@@ -1087,6 +1112,13 @@ def webhook():
         sessao["resumo_para_gabriel"].append(f"Cliente: {texto}")
 
         texto_lower = texto.lower()
+       
+
+
+        
+
+              
+        
 
         # ==============================
         # 4. RECEBE NOME
@@ -1180,17 +1212,40 @@ def webhook():
             return "OK", 200
 
         # ==============================
-        # 8. FOTO / VÍDEO
+        # FOTO / VÍDEO
         # ==============================
         if detectar_pedido_foto(texto):
             caminhao = sessao.get("caminhao_em_foco")
 
-            if caminhao:
-                imagens = caminhao.get("imagens") or []
-                enviar_mensagem(numero, "Com certeza, patrão. Já te mando.")
-                if imagens:
-                    enviar_imagens_caminhao(numero, imagens, limite=20)
+            if not caminhao:
+                enviar_mensagem(
+                    numero,
+                    "Qual caminhão você quer ver as fotos, patrão?"
+                )
                 return "OK", 200
+
+            imagens = caminhao.get("imagens") or []
+
+            if not imagens:
+                enviar_mensagem(
+                    numero,
+                    "Esse caminhão ainda não tem fotos cadastradas, patrão."
+                )
+                return "OK", 200
+
+            enviar_mensagem(numero, "Com certeza, patrão. Já te mando.")
+
+            sucesso = enviar_imagens_caminhao(
+                numero,
+                imagens,
+                limite=20
+            )
+
+            if not sucesso:
+                print("Falha ao enviar imagens")
+
+            return "OK", 200
+
 
         # ==============================
         # 9. GPT (SÓ TEXTO, SEM DECIDIR DISPONIBILIDADE)
