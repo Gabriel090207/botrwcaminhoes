@@ -969,6 +969,11 @@ def detectar_caminhao_no_texto(texto, caminhoes_base):
         # 🎯 REGRA FINAL
         if pontos >= 2:
             return c
+        
+        # Se tiver modelo + tração → também aceita
+        if pontos >= 1:
+            if any(n in t for n in ["460", "440", "480", "510", "540"]):
+                return c
 
     return None
 
