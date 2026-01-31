@@ -1046,14 +1046,6 @@ def webhook():
         if numero in SESSOES and message_id:
             if message_id in SESSOES[numero].get("mensagens_processadas", set()):
                 return "OK", 200
-            
-
-        texto_lower = texto.lower()
-        print(f">> Cliente {numero}: {texto}")
-
-
-        
-
 
         # ==============================
         # 2. GARANTE SESSÃO
@@ -1095,12 +1087,6 @@ def webhook():
         sessao["resumo_para_gabriel"].append(f"Cliente: {texto}")
 
         texto_lower = texto.lower()
-       
-
-
-        
-
-              
         
 
         # ==============================
