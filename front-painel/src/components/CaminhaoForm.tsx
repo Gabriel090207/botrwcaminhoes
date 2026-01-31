@@ -28,26 +28,32 @@ interface CaminhaoFormProps {
 }
 
 export function CaminhaoForm({ initialData, onSave }: CaminhaoFormProps) {
-  const [form, setForm] = useState<Caminhao>(
-    initialData || {
-      id: crypto.randomUUID(),
-      marca: '',
-      modelo: '',
-      ano: '',
-      tipo: 'Repasse',
-      quantidade: '',
+  const [form, setForm] = useState<Caminhao>(() => {
 
-      tracao: '',
-      entreEixo: '',
-
-      valor: '',
-
-      resumo: '',
-      observacao: '',
-
+  if (initialData) {
+    return {
+      ...initialData,
       imagens: []
     }
-  )
+  }
+
+  return {
+    id: crypto.randomUUID(),
+    marca: '',
+    modelo: '',
+    ano: '',
+    tipo: 'Repasse',
+    quantidade: '',
+    tracao: '',
+    entreEixo: '',
+    valor: '',
+    resumo: '',
+    observacao: '',
+    imagens: []
+  }
+})
+
+  
 
   const [previews, setPreviews] = useState<string[]>([])
 

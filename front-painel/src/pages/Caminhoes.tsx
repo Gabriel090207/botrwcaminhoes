@@ -12,6 +12,7 @@ import '../styles/caminhoes.css'
 
 import {
   criarCaminhao,
+  atualizarCaminhao,
   listarCaminhoes,
   removerCaminhao as removerCaminhaoFirebase,
 } from '../services/caminhoes'
@@ -36,14 +37,35 @@ export function Caminhoes() {
   
 
   async function salvarCaminhao(data: Caminhao) {
-    await criarCaminhao(data)
-  
+
+  try {
+
+    console.log("SALVAR INICIADO", data)
+
+    if (editando) {
+      console.log("EDITANDO CAMINHÃO")
+      await atualizarCaminhao(data)
+    } else {
+      console.log("CRIANDO CAMINHÃO")
+      await criarCaminhao(data)
+    }
+
+    console.log("SALVOU NO FIREBASE")
+
     const lista = await listarCaminhoes()
     setCaminhoes(lista)
-  
+
     setModalOpen(false)
     setEditando(null)
+
+    console.log("MODAL FECHADO")
+
+  } catch (erro) {
+    console.error("ERRO AO SALVAR:", erro)
+    alert("Erro ao salvar caminhão. Veja console.")
   }
+}
+
   
 
   async function removerCaminhao(id: string) {

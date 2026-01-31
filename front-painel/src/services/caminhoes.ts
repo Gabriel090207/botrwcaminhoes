@@ -3,12 +3,20 @@ import {
   doc,
   setDoc,
   getDocs,
-  updateDoc,
+  
   serverTimestamp,
   query,
-  where,
+  deleteDoc,
 } from 'firebase/firestore'
-import { ref, uploadBytes, getDownloadURL, listAll, deleteObject } from 'firebase/storage'
+
+import {
+  ref,
+  uploadBytes,
+  getDownloadURL,
+  listAll,
+  deleteObject
+} from 'firebase/storage'
+
 import { db, storage } from './firebase'
 import type { Caminhao } from '../components/CaminhaoForm'
 
@@ -21,6 +29,7 @@ async function uploadImagensCaminhao(
   caminhaoId: string,
   imagens: File[]
 ): Promise<string[]> {
+
   const urls: string[] = []
 
   for (let i = 0; i < imagens.length; i++) {
@@ -32,6 +41,7 @@ async function uploadImagensCaminhao(
     )
 
     await uploadBytes(imageRef, file)
+
     const url = await getDownloadURL(imageRef)
     urls.push(url)
   }
@@ -43,6 +53,7 @@ async function uploadImagensCaminhao(
  * Criar caminhão
  */
 export async function criarCaminhao(caminhao: Caminhao): Promise<void> {
+
   const refDoc = doc(db, COLLECTION, caminhao.id)
 
   const { imagens, ...dados } = caminhao
@@ -56,18 +67,40 @@ export async function criarCaminhao(caminhao: Caminhao): Promise<void> {
   await setDoc(refDoc, {
     ...dados,
     imagens: imagensUrls,
-    ativo: true,
     criadoEm: serverTimestamp(),
   })
 }
 
+
+export async function atualizarCaminhao(caminhao: Caminhao): Promise<void> {
+
+  const refDoc = doc(db, COLLECTION, caminhao.id)
+
+  const { imagens, id, ...dados } = caminhao
+
+
+  let imagensUrls: string[] = []
+
+  if (imagens && imagens.length > 0) {
+    imagensUrls = await uploadImagensCaminhao(caminhao.id, imagens)
+  }
+
+  await setDoc(refDoc, {
+    ...dados,
+    ...(imagensUrls.length > 0 ? { imagens: imagensUrls } : {}),
+    atualizadoEm: serverTimestamp(),
+  }, { merge: true })
+}
+
+
+
 /**
- * Listar caminhões ativos
+ * Listar caminhões (sem filtro ativo)
  */
 export async function listarCaminhoes(): Promise<Caminhao[]> {
+
   const q = query(
-    collection(db, COLLECTION),
-    where('ativo', '==', true)
+    collection(db, COLLECTION)
   )
 
   const snap = await getDocs(q)
@@ -79,24 +112,30 @@ export async function listarCaminhoes(): Promise<Caminhao[]> {
 }
 
 /**
- * Remover caminhão (soft delete)
- * Opcional: também remove imagens do Storage
+ * 🔥 REMOVER CAMINHÃO (DELETE REAL)
+ * Remove Firestore + Storage
  */
 export async function removerCaminhao(id: string): Promise<void> {
+
   const refDoc = doc(db, COLLECTION, id)
 
-  // soft delete
-  await updateDoc(refDoc, { ativo: false })
+  // 🔥 Deleta documento do Firestore
+  await deleteDoc(refDoc)
 
-  // 🔥 opcional: apagar imagens do storage
+  // 🔥 Deleta imagens do Storage
   try {
+
     const folderRef = ref(storage, `caminhoes/${id}`)
     const files = await listAll(folderRef)
 
     await Promise.all(
       files.items.map(fileRef => deleteObject(fileRef))
     )
+
   } catch (e) {
-    console.warn('Não foi possível remover imagens do storage:', e)
+    console.warn(
+      'Não foi possível remover imagens do storage:',
+      e
+    )
   }
 }

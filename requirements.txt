@@ -1,6 +1,6 @@
 flask
-openai
-python-dotenv
 requests
+python-dotenv
+openai
 firebase-admin
-flask-cors
+gunicorn
