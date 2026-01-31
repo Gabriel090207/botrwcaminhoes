@@ -899,11 +899,9 @@ def detectar_pedido_foto(texto: str) -> bool:
 def detectar_caminhao_no_texto(texto, caminhoes):
     texto = (texto or "").lower()
 
-    candidatos = []
+    # quebra texto em palavras
+    palavras_texto = texto.split()
 
-    # ==============================
-    # 1. marca + modelo
-    # ==============================
     for c in caminhoes:
         if not c.get("ativo", True):
             continue
@@ -911,42 +909,22 @@ def detectar_caminhao_no_texto(texto, caminhoes):
         marca = (c.get("marca") or "").lower()
         modelo = (c.get("modelo") or "").lower()
 
-        nome = f"{marca} {modelo}".strip()
+        partes_modelo = modelo.split()
 
-        if nome and nome in texto:
+        # verifica se todas as partes do modelo aparecem no texto
+        if all(parte in texto for parte in partes_modelo if parte):
             return c
 
-    # ==============================
-    # 2. modelo + ano
-    # ==============================
-    for c in caminhoes:
-        if not c.get("ativo", True):
-            continue
+        # verifica também marca + partes soltas
+        if marca and marca in texto:
+            encontrou_partes = sum(
+                1 for parte in partes_modelo if parte in palavras_texto
+            )
 
-        modelo = (c.get("modelo") or "").lower()
-        ano = str(c.get("ano") or "")
+            if encontrou_partes >= 1:
+                return c
 
-        if modelo in texto and ano in texto:
-            return c
-
-    # ==============================
-    # 3. somente modelo
-    # ==============================
-    for c in caminhoes:
-        if not c.get("ativo", True):
-            continue
-
-        modelo = (c.get("modelo") or "").lower()
-
-        if modelo and modelo in texto:
-            candidatos.append(c)
-
-    if len(candidatos) == 1:
-        return candidatos[0]
-
-    # ==============================
-    # 4. tração (último recurso)
-    # ==============================
+    # fallback por tração
     tracao_pedida = detectar_tracao_pedida(texto)
 
     if tracao_pedida:
@@ -962,6 +940,25 @@ def detectar_caminhao_no_texto(texto, caminhoes):
     return None
 
 
+import re
+
+def extrair_km_do_resumo(caminhao):
+    resumo = (caminhao.get("resumo") or "").lower()
+
+    # padrão "890 mil km"
+    match = re.search(r'(\d+)\s*mil\s*km', resumo)
+    if match:
+        return f"{match.group(1)} mil km"
+
+    # padrão "650000 km"
+    match = re.search(r'(\d{3,6})\s*km', resumo)
+    if match:
+        km = match.group(1)
+        if len(km) > 3:
+            km = km[:-3] + " mil"
+        return f"{km} km"
+
+    return None
 
 
 def enviar_mensagem(numero, texto):
@@ -1004,14 +1001,23 @@ def transcrever_audio(caminho_audio):
 def avisar_gabriel(numero_cliente, sessao):
     resumo = "\n".join(sessao.get("resumo_para_gabriel", []))
 
+    caminhao = sessao.get("caminhao_em_foco")
+
+    if caminhao:
+        nome_caminhao = f"{caminhao.get('marca')} {caminhao.get('modelo')} {caminhao.get('ano')}"
+    else:
+        nome_caminhao = "Não identificado"
+
     texto = (
         "🔔 *NOVO LEAD TRANSFERIDO*\n\n"
-        f"📞 Cliente: {numero_cliente}\n\n"
+        f"📞 Cliente: {numero_cliente}\n"
+        f"🚚 Caminhão: {nome_caminhao}\n\n"
         f"📝 Conversa:\n{resumo}\n\n"
         "🤝 Atendimento transferido para você."
     )
 
     enviar_mensagem(NUMERO_GABRIEL, texto)
+
 
 def detectar_tracao_pedida(texto: str):
     if not texto:
@@ -1094,8 +1100,16 @@ def webhook():
         sessao = SESSOES[numero]
         atualizar_base_caminhoes_seguranca(sessao)
 
+
         if sessao["pausado_para_gabriel"]:
-            return "OK", 200
+            pausa = sessao.get("pausado_desde")
+
+            if pausa and datetime.now() - pausa < timedelta(minutes=1000):
+                return "OK", 200
+
+            # libera atendimento novamente
+            sessao["pausado_para_gabriel"] = False
+
 
         if message_id:
             sessao["mensagens_processadas"].add(message_id)
@@ -1131,6 +1145,7 @@ def webhook():
 
             sessao["aguardando_nome_para_transferencia"] = False
             sessao["pausado_para_gabriel"] = True
+            sessao["pausado_desde"] = datetime.now()
             avisar_gabriel(numero, sessao)
             return "OK", 200
 
@@ -1258,7 +1273,13 @@ def webhook():
         # injeta caminhão real no contexto
         caminhao = sessao.get("caminhao_em_foco")
 
+
+        km = extrair_km_do_resumo(caminhao) or "Não informado"
+
         if caminhao:
+
+      
+
             contexto_real = f"""
         DADOS REAIS DO CAMINHÃO EM FOCO (BANCO):
         Marca: {caminhao.get("marca")}
@@ -1266,6 +1287,7 @@ def webhook():
         Ano: {caminhao.get("ano")}
         Tração: {caminhao.get("tracao")}
         Valor: {caminhao.get("valor")}
+        KM: {km}
         Observação: {caminhao.get("observacao")}
 
         REGRA:
