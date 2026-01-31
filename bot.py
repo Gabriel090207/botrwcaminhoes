@@ -907,65 +907,32 @@ def detectar_pedido_foto(texto: str) -> bool:
     t = (texto or "").lower()
     return any(p in t for p in PALAVRAS_FOTO)
 
-def detectar_caminhao_no_texto(texto, caminhoes_base):
-    """
-    Detecta caminhão mesmo com nome incompleto.
-    Ex:
-    - 'daf 510'
-    - 'daf xf 510 2017'
-    - '510 6x4'
-    """
 
-    if not texto:
-        return None
+def detectar_caminhao_no_texto(texto, caminhoes):
+    texto = texto.lower()
 
-    t = texto.lower()
-
-    for c in caminhoes_base:
-        if not c.get("ativo", True):
-            continue
-
-        pontos = 0
-
+    for c in caminhoes:
         marca = (c.get("marca") or "").lower()
         modelo = (c.get("modelo") or "").lower()
-        ano = str(c.get("ano") or "")
         tracao = (c.get("tracao") or "").lower()
+        ano = str(c.get("ano") or "")
 
-        # 🔹 Marca (DAF, Volvo, Scania)
-        if marca and marca in t:
-            pontos += 2
+        palavras_modelo = modelo.split()
 
-        # 🔹 Potência / número principal (510, 460, 440 etc)
-        numeros = [n for n in modelo.split() if n.isdigit()]
-        for n in numeros:
-            if n in t:
-                pontos += 3
-                break
-
-        # 🔹 Ano
-        if ano and ano in t:
-            pontos += 1
-
-        # 🔹 Tração por apelido
-        MAPA_TRACAO = {
-            "toco": "4x2",
-            "truck": "6x2",
-            "trucado": "6x2",
-            "traçado": "6x4",
-            "tracado": "6x4",
-            "bitruck": "8x2"
-        }
-
-        for apelido, tr in MAPA_TRACAO.items():
-            if apelido in t and tr == tracao:
-                pontos += 1
-
-        # 🎯 REGRA FINAL MAIS INTELIGENTE
-        if pontos >= 3:
+        # regra principal: qualquer número ou palavra-chave do modelo
+        if (
+            marca in texto
+            and any(p in texto for p in palavras_modelo)
+        ):
             return c
 
+        # aceita só o número (ex: "510", "460")
+        for p in palavras_modelo:
+            if p.isdigit() and p in texto:
+                return c
+
     return None
+
 
 
 def enviar_mensagem(numero, texto):
