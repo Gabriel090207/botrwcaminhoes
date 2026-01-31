@@ -969,11 +969,6 @@ def detectar_caminhao_no_texto(texto, caminhoes_base):
         # 🎯 REGRA FINAL
         if pontos >= 2:
             return c
-        
-        # Se tiver modelo + tração → também aceita
-        if pontos >= 1:
-            if any(n in t for n in ["460", "440", "480", "510", "540"]):
-                return c
 
     return None
 
@@ -1196,13 +1191,10 @@ def webhook():
             sessao["caminhao_em_foco"] = caminhao_detectado
 
         # ==============================
-        # 6. DETECTA TRAÇÃO (SÓ SE NÃO TIVER MODELO)
+        # 6. DETECTA TRAÇÃO (toco / trucado / traçado)
         # ==============================
         tracao = detectar_tracao_pedida(texto)
-
-        # ⚠️ SÓ roda tração se NÃO detectou caminhão específico
-        if tracao and not caminhao_detectado and not sessao.get("caminhao_em_foco"):
-
+        if tracao and not sessao.get("caminhao_em_foco"):
             encontrados = [
                 c for c in sessao["caminhoes_base"]
                 if c.get("ativo", True) and c.get("tracao") == tracao
@@ -1213,25 +1205,22 @@ def webhook():
                     f"{c.get('marca')} {c.get('modelo')} {c.get('ano')}"
                     for c in encontrados
                 ]
-
                 enviar_mensagem(
                     numero,
                     "Tem sim, patrão. No momento tenho: " + ", ".join(nomes)
                 )
 
-                # 🔒 Se só tiver 1 → fixa foco
+                # 🔒 FIXA CAMINHÃO SE FOR ÚNICO
                 if len(encontrados) == 1:
                     sessao["caminhao_em_foco"] = encontrados[0]
+            else:
+                enviar_mensagem(
+                    numero,
+                    "No momento não tenho dessa tração disponível, patrão. "
+                    "Mas sempre entra coisa boa."
+                )
 
-        else:
-            enviar_mensagem(
-                numero,
-                "No momento não tenho dessa tração disponível, patrão. "
-                "Mas sempre entra coisa boa."
-            )
-
-        return "OK", 200
-
+            return "OK", 200
 
         # ==============================
         # 7. PEDIDO DE FOTO / VÍDEO
