@@ -1105,7 +1105,7 @@ def webhook():
             sessao["mensagens_processadas"].add(message_id)
 
         # ==============================
-        # 3. TEXTO / ÁUDIO
+        # 3. TEXTO
         # ==============================
         texto = (
             data.get("text", {}).get("message")
@@ -1116,117 +1116,82 @@ def webhook():
         if not texto:
             return "OK", 200
 
+        texto_lower = texto.lower()
         print(f">> Cliente {numero}: {texto}")
         sessao["resumo_para_gabriel"].append(f"Cliente: {texto}")
-
-        texto_lower = texto.lower()
 
         # ==============================
         # 4. RECEBE NOME
         # ==============================
         if sessao["aguardando_nome_para_transferencia"]:
             nome = texto.strip().split()[0].capitalize()
-
             enviar_mensagem(
                 numero,
                 f"Valeu, {nome}! 👍 O Gabriel vai entrar em contato contigo pra alinhar certinho."
             )
-
             sessao["aguardando_nome_para_transferencia"] = False
             sessao["pausado_para_gabriel"] = True
             avisar_gabriel(numero, sessao)
             return "OK", 200
 
         # ==============================
-        # 5. DETECTA CAMINHÃO ESPECÍFICO
+        # 5. BUSCA INTELIGENTE NO BANCO (PARCIAL OU COMPLETA)
         # ==============================
-        caminhao_detectado = detectar_caminhao_no_texto(
-            texto,
-            sessao["caminhoes_base"]
-        )
+        encontrados = []
 
-        if caminhao_detectado:
-            sessao["caminhao_em_foco"] = caminhao_detectado
+        for c in sessao["caminhoes_base"]:
+            if not c.get("ativo", True):
+                continue
 
-        # ==============================
-        # 6. BUSCA GENÉRICA POR MODELO (EX: "tem daf 510?")
-        # ==============================
-        if (
-            "daf" in texto_lower
-            and "510" in texto_lower
-            and not sessao.get("caminhao_em_foco")
-        ):
-            encontrados = [
-                c for c in sessao["caminhoes_base"]
-                if c.get("ativo", True)
-                and "510" in (c.get("modelo") or "")
-            ]
+            marca = (c.get("marca") or "").lower()
+            modelo = (c.get("modelo") or "").lower()
+            ano = str(c.get("ano") or "")
+            tracao = (c.get("tracao") or "").lower()
 
-            if encontrados:
-                nomes = [
-                    f"{c.get('marca')} {c.get('modelo')} {c.get('ano')} {c.get('tracao')}"
-                    for c in encontrados
-                ]
+            pontos = 0
 
+            if marca and marca in texto_lower:
+                pontos += 1
+
+            for num in ["440", "460", "510"]:
+                if num in texto_lower and num in modelo:
+                    pontos += 2
+
+            if ano and ano in texto_lower:
+                pontos += 1
+
+            if tracao and tracao in texto_lower:
+                pontos += 1
+
+            if pontos >= 2:
+                encontrados.append(c)
+
+        if encontrados:
+            # Se só existir um, fixa foco
+            if len(encontrados) == 1:
+                sessao["caminhao_em_foco"] = encontrados[0]
+                c = encontrados[0]
                 enviar_mensagem(
                     numero,
-                    "Tem sim, patrão. No momento tenho: " + ", ".join(nomes)
+                    f"Tenho sim, patrão. É um {c.get('marca')} {c.get('modelo')} "
+                    f"{c.get('tracao')} {c.get('ano')}, bem alinhado pra repasse."
                 )
-
-                if len(encontrados) == 1:
-                    sessao["caminhao_em_foco"] = encontrados[0]
-
                 return "OK", 200
 
-        # ==============================
-        # 7. TRAÇÃO (SÓ SE NÃO HOUVER FOCO)
-        # ==============================
-        tracao = detectar_tracao_pedida(texto)
-
-        if tracao and not sessao.get("caminhao_em_foco"):
-            encontrados = [
-                c for c in sessao["caminhoes_base"]
-                if c.get("ativo", True) and c.get("tracao") == tracao
+            # Se existir mais de um, lista
+            nomes = [
+                f"{c.get('marca')} {c.get('modelo')} {c.get('ano')} {c.get('tracao')}"
+                for c in encontrados
             ]
 
-            if encontrados:
-                nomes = [
-                    f"{c.get('marca')} {c.get('modelo')} {c.get('ano')}"
-                    for c in encontrados
-                ]
-
-                enviar_mensagem(
-                    numero,
-                    "Tem sim, patrão. No momento tenho: " + ", ".join(nomes)
-                )
-
-                if len(encontrados) == 1:
-                    sessao["caminhao_em_foco"] = encontrados[0]
-
-            else:
-                enviar_mensagem(
-                    numero,
-                    "No momento não tenho dessa tração disponível, patrão. "
-                    "Mas sempre entra coisa boa."
-                )
-
+            enviar_mensagem(
+                numero,
+                "Tem sim, patrão. No momento tenho: " + ", ".join(nomes)
+            )
             return "OK", 200
 
         # ==============================
-        # 8. FOTO / VÍDEO
-        # ==============================
-        if detectar_pedido_foto(texto):
-            caminhao = sessao.get("caminhao_em_foco")
-
-            if caminhao:
-                imagens = caminhao.get("imagens") or []
-                enviar_mensagem(numero, "Com certeza, patrão. Já te mando.")
-                if imagens:
-                    enviar_imagens_caminhao(numero, imagens, limite=20)
-                return "OK", 200
-
-        # ==============================
-        # 9. GPT (SÓ TEXTO, SEM DECIDIR DISPONIBILIDADE)
+        # 6. GPT (SÓ CONVERSA, NUNCA DECIDE DISPONIBILIDADE)
         # ==============================
         historico = sessao["historico"]
         historico.append({"role": "user", "content": texto})
