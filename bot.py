@@ -897,37 +897,70 @@ def detectar_pedido_foto(texto: str) -> bool:
 
 
 def detectar_caminhao_no_texto(texto, caminhoes):
-    texto = texto.lower()
-    
-    # 1. Tenta achar por correspondência exata de marca e modelo primeiro
+    texto = (texto or "").lower()
+
+    candidatos = []
+
+    # ==============================
+    # 1. marca + modelo
+    # ==============================
     for c in caminhoes:
-        if not c.get("ativo", True): continue
-        
+        if not c.get("ativo", True):
+            continue
+
         marca = (c.get("marca") or "").lower()
         modelo = (c.get("modelo") or "").lower()
-        nome_completo = f"{marca} {modelo}"
-        
-        if nome_completo in texto and (marca != "" and modelo != ""):
+
+        nome = f"{marca} {modelo}".strip()
+
+        if nome and nome in texto:
             return c
 
-    # 2. Se não achou o nome completo, busca por palavras-chave do modelo (ex: "510", "460", "R440")
+    # ==============================
+    # 2. modelo + ano
+    # ==============================
     for c in caminhoes:
-        if not c.get("ativo", True): continue
+        if not c.get("ativo", True):
+            continue
+
         modelo = (c.get("modelo") or "").lower()
-        palavras_modelo = modelo.split()
-        
-        for p in palavras_modelo:
-            if len(p) > 2 and p in texto: # len > 2 evita confundir "FH" com qualquer palavra
-                return c
-                
-    # 3. Busca por tração (se o cliente pedir "um trucado" e tiver apenas um no banco)
+        ano = str(c.get("ano") or "")
+
+        if modelo in texto and ano in texto:
+            return c
+
+    # ==============================
+    # 3. somente modelo
+    # ==============================
+    for c in caminhoes:
+        if not c.get("ativo", True):
+            continue
+
+        modelo = (c.get("modelo") or "").lower()
+
+        if modelo and modelo in texto:
+            candidatos.append(c)
+
+    if len(candidatos) == 1:
+        return candidatos[0]
+
+    # ==============================
+    # 4. tração (último recurso)
+    # ==============================
     tracao_pedida = detectar_tracao_pedida(texto)
+
     if tracao_pedida:
-        caminhoes_com_aquela_tracao = [c for c in caminhoes if c.get("tracao") == tracao_pedida and c.get("ativo", True)]
-        if len(caminhoes_com_aquela_tracao) == 1:
-            return caminhoes_com_aquela_tracao[0]
+        filtrados = [
+            c for c in caminhoes
+            if c.get("ativo", True)
+            and c.get("tracao") == tracao_pedida
+        ]
+
+        if len(filtrados) == 1:
+            return filtrados[0]
 
     return None
+
 
 
 
@@ -1110,7 +1143,12 @@ def webhook():
         )
 
         if caminhao_detectado:
-            sessao["caminhao_em_foco"] = caminhao_detectado
+            atual = sessao.get("caminhao_em_foco")
+
+            if not atual or atual.get("id") != caminhao_detectado.get("id"):
+                print("DEBUG: Caminhão em foco alterado para:",
+                    caminhao_detectado.get("modelo"))
+                sessao["caminhao_em_foco"] = caminhao_detectado
 
         # ==============================
         # 6. BUSCA GENÉRICA POR MODELO (EX: "tem daf 510?")
@@ -1216,13 +1254,37 @@ def webhook():
         # 9. GPT (SÓ TEXTO, SEM DECIDIR DISPONIBILIDADE)
         # ==============================
         historico = sessao["historico"]
-        historico.append({"role": "user", "content": texto})
 
-        resposta = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=historico,
-            temperature=0.3
-        )
+        # injeta caminhão real no contexto
+        caminhao = sessao.get("caminhao_em_foco")
+
+        if caminhao:
+            contexto_real = f"""
+        DADOS REAIS DO CAMINHÃO EM FOCO (BANCO):
+        Marca: {caminhao.get("marca")}
+        Modelo: {caminhao.get("modelo")}
+        Ano: {caminhao.get("ano")}
+        Tração: {caminhao.get("tracao")}
+        Valor: {caminhao.get("valor")}
+        Observação: {caminhao.get("observacao")}
+
+        REGRA:
+        Use somente esses dados.
+        Nunca invente valor ou características.
+        """
+
+            historico.append({
+                "role": "system",
+                "content": contexto_real
+            })
+
+            historico.append({"role": "user", "content": texto})
+
+            resposta = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=historico,
+                temperature=0.2
+            )
 
         mensagem = limpar_resposta_whatsapp(resposta.choices[0].message.content)
 
