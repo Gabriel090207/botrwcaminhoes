@@ -1196,10 +1196,13 @@ def webhook():
             sessao["caminhao_em_foco"] = caminhao_detectado
 
         # ==============================
-        # 6. DETECTA TRAÇÃO (toco / trucado / traçado)
+        # 6. DETECTA TRAÇÃO (SÓ SE NÃO TIVER MODELO)
         # ==============================
         tracao = detectar_tracao_pedida(texto)
-        if tracao and not sessao.get("caminhao_em_foco"):
+
+        # ⚠️ SÓ roda tração se NÃO detectou caminhão específico
+        if tracao and not caminhao_detectado and not sessao.get("caminhao_em_foco"):
+
             encontrados = [
                 c for c in sessao["caminhoes_base"]
                 if c.get("ativo", True) and c.get("tracao") == tracao
@@ -1210,22 +1213,25 @@ def webhook():
                     f"{c.get('marca')} {c.get('modelo')} {c.get('ano')}"
                     for c in encontrados
                 ]
+
                 enviar_mensagem(
                     numero,
                     "Tem sim, patrão. No momento tenho: " + ", ".join(nomes)
                 )
 
-                # 🔒 FIXA CAMINHÃO SE FOR ÚNICO
+                # 🔒 Se só tiver 1 → fixa foco
                 if len(encontrados) == 1:
                     sessao["caminhao_em_foco"] = encontrados[0]
-            else:
-                enviar_mensagem(
-                    numero,
-                    "No momento não tenho dessa tração disponível, patrão. "
-                    "Mas sempre entra coisa boa."
-                )
 
-            return "OK", 200
+        else:
+            enviar_mensagem(
+                numero,
+                "No momento não tenho dessa tração disponível, patrão. "
+                "Mas sempre entra coisa boa."
+            )
+
+        return "OK", 200
+
 
         # ==============================
         # 7. PEDIDO DE FOTO / VÍDEO
