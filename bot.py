@@ -898,9 +898,10 @@ def detectar_pedido_foto(texto: str) -> bool:
 
 def detectar_caminhao_no_texto(texto, caminhoes):
     texto = (texto or "").lower()
-
-    # quebra texto em palavras
     palavras_texto = texto.split()
+
+    melhor_match = None
+    melhor_score = 0
 
     for c in caminhoes:
         if not c.get("ativo", True):
@@ -908,34 +909,36 @@ def detectar_caminhao_no_texto(texto, caminhoes):
 
         marca = (c.get("marca") or "").lower()
         modelo = (c.get("modelo") or "").lower()
+        ano = str(c.get("ano") or "").lower()
 
         partes_modelo = modelo.split()
 
-        # verifica se todas as partes do modelo aparecem no texto
-        if all(parte in texto for parte in partes_modelo if parte):
-            return c
+        score = 0
 
-        # verifica também marca + partes soltas
+        # marca
         if marca and marca in texto:
-            encontrou_partes = sum(
-                1 for parte in partes_modelo if parte in palavras_texto
-            )
+            score += 2
 
-            if encontrou_partes >= 1:
-                return c
+        # partes do modelo (460, 6x4, xf etc)
+        for parte in partes_modelo:
+            if parte in palavras_texto:
+                score += 3
 
-    # fallback por tração
-    tracao_pedida = detectar_tracao_pedida(texto)
+        # ano
+        if ano and ano in palavras_texto:
+            score += 2
 
-    if tracao_pedida:
-        filtrados = [
-            c for c in caminhoes
-            if c.get("ativo", True)
-            and c.get("tracao") == tracao_pedida
-        ]
+        # bônus se todas partes do modelo aparecem
+        if all(parte in palavras_texto for parte in partes_modelo if parte):
+            score += 5
 
-        if len(filtrados) == 1:
-            return filtrados[0]
+        if score > melhor_score:
+            melhor_score = score
+            melhor_match = c
+
+    # exige score mínimo para evitar chute errado
+    if melhor_score >= 5:
+        return melhor_match
 
     return None
 
@@ -1076,7 +1079,12 @@ def webhook():
         if not numero:
             return "OK", 200
 
-        message_id = data.get("messageId") or data.get("id")
+        message_id = (
+            data.get("messageId")
+            or data.get("id")
+            or (data.get("message") or {}).get("id")
+        )
+
 
         if numero in SESSOES and message_id:
             if message_id in SESSOES[numero].get("mensagens_processadas", set()):
@@ -1125,6 +1133,11 @@ def webhook():
 
         if not texto:
             return "OK", 200
+        
+
+        if sessao["pausado_para_gabriel"]:
+            return "OK", 200
+
 
         print(f">> Cliente {numero}: {texto}")
         sessao["resumo_para_gabriel"].append(f"Cliente: {texto}")
