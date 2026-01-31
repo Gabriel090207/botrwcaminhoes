@@ -1065,26 +1065,32 @@ def webhook():
 
     try:
         # ==============================
-        # 1. FILTROS BÁSICOS
+        # 1. FILTROS + ANTI DUPLICAÇÃO
         # ==============================
         if not data or data.get("fromMe"):
             return "OK", 200
 
         numero = data.get("phone")
-        if not numero:
-            return "OK", 200
-
         message_id = data.get("messageId") or data.get("id")
 
-        if numero in SESSOES and message_id:
-            if message_id in SESSOES[numero].get("mensagens_processadas", set()):
-                return "OK", 200
+        if not numero or not message_id:
+            return "OK", 200
+
+        if numero not in SESSOES:
+            SESSOES[numero] = {
+                "mensagens_processadas": set()
+            }
+
+        if message_id in SESSOES[numero]["mensagens_processadas"]:
+            return "OK", 200
+
+        SESSOES[numero]["mensagens_processadas"].add(message_id)
 
         # ==============================
         # 2. GARANTE SESSÃO
         # ==============================
-        if numero not in SESSOES:
-            SESSOES[numero] = {
+        if "historico" not in SESSOES[numero]:
+            SESSOES[numero].update({
                 "caminhao_em_foco": None,
                 "caminhoes_base": carregar_caminhoes(),
                 "historico": [{"role": "system", "content": SYSTEM_PROMPT}],
@@ -1092,17 +1098,13 @@ def webhook():
                 "pausado_para_gabriel": False,
                 "aguardando_nome_para_transferencia": False,
                 "resumo_para_gabriel": [],
-                "mensagens_processadas": set(),
-            }
+            })
 
         sessao = SESSOES[numero]
         atualizar_base_caminhoes_seguranca(sessao)
 
         if sessao["pausado_para_gabriel"]:
             return "OK", 200
-
-        if message_id:
-            sessao["mensagens_processadas"].add(message_id)
 
         # ==============================
         # 3. TEXTO
@@ -1117,81 +1119,54 @@ def webhook():
             return "OK", 200
 
         texto_lower = texto.lower()
-        print(f">> Cliente {numero}: {texto}")
         sessao["resumo_para_gabriel"].append(f"Cliente: {texto}")
 
         # ==============================
-        # 4. RECEBE NOME
+        # 4. DETECTA CAMINHÃO ÚNICO (PRIORIDADE MÁXIMA)
         # ==============================
-        if sessao["aguardando_nome_para_transferencia"]:
-            nome = texto.strip().split()[0].capitalize()
-            enviar_mensagem(
-                numero,
-                f"Valeu, {nome}! 👍 O Gabriel vai entrar em contato contigo pra alinhar certinho."
-            )
-            sessao["aguardando_nome_para_transferencia"] = False
-            sessao["pausado_para_gabriel"] = True
-            avisar_gabriel(numero, sessao)
-            return "OK", 200
-
-        # ==============================
-        # 5. BUSCA INTELIGENTE NO BANCO (PARCIAL OU COMPLETA)
-        # ==============================
-        encontrados = []
+        caminhao_unico = None
+        melhor_pontuacao = 0
 
         for c in sessao["caminhoes_base"]:
             if not c.get("ativo", True):
                 continue
 
+            pontos = 0
             marca = (c.get("marca") or "").lower()
             modelo = (c.get("modelo") or "").lower()
             ano = str(c.get("ano") or "")
             tracao = (c.get("tracao") or "").lower()
 
-            pontos = 0
-
             if marca and marca in texto_lower:
-                pontos += 1
+                pontos += 2
 
             for num in ["440", "460", "510"]:
                 if num in texto_lower and num in modelo:
-                    pontos += 2
+                    pontos += 3
 
             if ano and ano in texto_lower:
-                pontos += 1
+                pontos += 2
 
             if tracao and tracao in texto_lower:
-                pontos += 1
+                pontos += 2
 
-            if pontos >= 2:
-                encontrados.append(c)
+            if pontos > melhor_pontuacao:
+                melhor_pontuacao = pontos
+                caminhao_unico = c
 
-        if encontrados:
-            # Se só existir um, fixa foco
-            if len(encontrados) == 1:
-                sessao["caminhao_em_foco"] = encontrados[0]
-                c = encontrados[0]
-                enviar_mensagem(
-                    numero,
-                    f"Tenho sim, patrão. É um {c.get('marca')} {c.get('modelo')} "
-                    f"{c.get('tracao')} {c.get('ano')}, bem alinhado pra repasse."
-                )
-                return "OK", 200
-
-            # Se existir mais de um, lista
-            nomes = [
-                f"{c.get('marca')} {c.get('modelo')} {c.get('ano')} {c.get('tracao')}"
-                for c in encontrados
-            ]
-
+        # 🎯 SE IDENTIFICOU UM CAMINHÃO CLARO
+        if caminhao_unico and melhor_pontuacao >= 6:
+            sessao["caminhao_em_foco"] = caminhao_unico
             enviar_mensagem(
                 numero,
-                "Tem sim, patrão. No momento tenho: " + ", ".join(nomes)
+                f"Tenho sim, patrão. É um {caminhao_unico.get('marca')} "
+                f"{caminhao_unico.get('modelo')} {caminhao_unico.get('tracao')} "
+                f"{caminhao_unico.get('ano')}, caminhão forte, econômico e bem alinhado pra repasse."
             )
             return "OK", 200
 
         # ==============================
-        # 6. GPT (SÓ CONVERSA, NUNCA DECIDE DISPONIBILIDADE)
+        # 5. GPT (SÓ CONVERSA)
         # ==============================
         historico = sessao["historico"]
         historico.append({"role": "user", "content": texto})
@@ -1203,17 +1178,10 @@ def webhook():
         )
 
         mensagem = limpar_resposta_whatsapp(resposta.choices[0].message.content)
-
         sessao["resumo_para_gabriel"].append(f"Ronaldo: {mensagem}")
         historico.append({"role": "assistant", "content": mensagem})
 
-        mensagens = quebrar_em_mensagens(mensagem)
-        limite = 2 if sessao["primeira_resposta"] else 1
-
-        for msg in mensagens[:limite]:
-            enviar_mensagem(numero, msg)
-            time.sleep(1)
-
+        enviar_mensagem(numero, mensagem)
         sessao["primeira_resposta"] = False
 
     except Exception as e:
@@ -1222,7 +1190,6 @@ def webhook():
         traceback.print_exc()
 
     return "OK", 200
-
 
 
 
