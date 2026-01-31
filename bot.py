@@ -471,22 +471,25 @@ Exemplos corretos (desabafo real):
 "Poxa, imagino. Quer me contar melhor?"
 
 
+
+
 CAMINHÕES DISPONÍVEIS (REGRA ABSOLUTA):
 
-A lista abaixo é a ÚNICA fonte de verdade.
-Ela vem diretamente do banco de dados.
+Você NÃO deve decidir se existe ou não caminhão.
+Você NÃO deve listar caminhões por conta própria.
+Você NÃO deve confirmar disponibilidade sem o sistema permitir.
 
-REGRAS OBRIGATÓRIAS:
-- NUNCA invente caminhões
-- NUNCA altere nomes
-- NUNCA crie listas, numeração ou tópicos
-- NUNCA descreva caminhões se o cliente não pedir
-- Quando perguntarem quais caminhões existem:
-  responda SOMENTE repetindo exatamente os nomes abaixo,
-  em uma única linha, separados por vírgula.
+Regra:
+- O sistema controla quais caminhões existem
+- Você apenas responde de forma humana
+- Se o sistema não tiver definido um caminhão,
+  responda de forma genérica e educada
+- Nunca invente
+- Nunca assuma
+- Nunca liste nomes de caminhões espontaneamente
 
-LISTA FECHADA (NÃO INTERPRETAR):
-{gerar_contexto_caminhoes_prompt()}
+
+
 
 TROCA / BRICK / PERMUTA (REGRA DE ENTENDIMENTO):
 
@@ -734,14 +737,6 @@ Vou te mandar o link do meu grupo pra acompanhar."
 Nunca responder com lista quando a pergunta for específica.
 
 
-CAMINHÕES DISPONÍVEIS — BASE ÚNICA DE VERDADE:
-
-As informações abaixo são EXATAS.
-Nunca invente dados.
-Nunca altere valores.
-Nunca misture caminhões.
-
-{gerar_contexto_caminhoes_prompt()}
 
 USO DA BASE DE CAMINHÕES (REGRA):
 
@@ -912,7 +907,9 @@ def detectar_pedido_foto(texto: str) -> bool:
     t = (texto or "").lower()
     return any(p in t for p in PALAVRAS_FOTO)
 
-def detectar_caminhao_no_texto(texto: str):
+def detectar_caminhao_no_texto(texto, caminhoes_base):
+   
+
     """
     Detecta caminhão mesmo com nome incompleto.
     Ex: 'daf 460 2019', 'fh 460', 'scania 440'
@@ -922,7 +919,8 @@ def detectar_caminhao_no_texto(texto: str):
 
     t = texto.lower()
 
-    for c in carregar_caminhoes():
+    for c in caminhoes_base:
+
         if not c.get("ativo", True):
             continue
 
@@ -1050,6 +1048,22 @@ def detectar_tracao_pedida(texto: str):
     return None
 
 
+def atualizar_base_caminhoes_seguranca(sessao):
+    """
+    Atualiza a base de caminhões SOMENTE se não houver caminhão em foco.
+    Evita confusão durante a conversa.
+    """
+    if sessao.get("caminhao_em_foco"):
+        return
+
+    try:
+        sessao["caminhoes_base"] = carregar_caminhoes()
+    except Exception as e:
+        print("Erro ao atualizar base de caminhões:", e)
+
+
+
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.json
@@ -1078,6 +1092,10 @@ def webhook():
         if numero not in SESSOES:
             SESSOES[numero] = {
                 "caminhao_em_foco": None,
+
+                "caminhoes_base": carregar_caminhoes(),
+
+
                 "historico": [{"role": "system", "content": SYSTEM_PROMPT}],
                 "primeira_resposta": True,
                 "pausado_para_gabriel": False,
@@ -1087,6 +1105,10 @@ def webhook():
             }
 
         sessao = SESSOES[numero]
+
+        # 🔄 Atualiza base de caminhões se estiver seguro
+        atualizar_base_caminhoes_seguranca(sessao)
+
 
         if sessao["pausado_para_gabriel"]:
             return "OK", 200
@@ -1120,6 +1142,27 @@ def webhook():
         print(f">> Cliente {numero}: {texto}")
         sessao["resumo_para_gabriel"].append(f"Cliente: {texto}")
 
+
+
+
+        # ==============================
+        # 3.1 LIMPA FOCO EM PERGUNTA GENÉRICA
+        # ==============================
+
+        PERGUNTAS_GENERICAS = [
+            "tem caminhão",
+            "tem caminhao",
+            "o que tem",
+            "quais tem",
+            "disponível",
+            "disponiveis",
+            "tem mais"
+        ]
+
+        if any(p in texto.lower() for p in PERGUNTAS_GENERICAS):
+            sessao["caminhao_em_foco"] = None
+
+
         # ==============================
         # 4. RECEBE NOME (FECHAMENTO)
         # ==============================
@@ -1140,7 +1183,10 @@ def webhook():
         # ==============================
         # 5. DETECTA CAMINHÃO PELO TEXTO
         # ==============================
-        caminhao_detectado = detectar_caminhao_no_texto(texto)
+        caminhao_detectado = detectar_caminhao_no_texto(
+            texto,
+            sessao["caminhoes_base"]
+        )
         if caminhao_detectado:
             sessao["caminhao_em_foco"] = caminhao_detectado
 
@@ -1148,9 +1194,9 @@ def webhook():
         # 6. DETECTA TRAÇÃO (toco / trucado / traçado)
         # ==============================
         tracao = detectar_tracao_pedida(texto)
-        if tracao:
+        if tracao and not sessao.get("caminhao_em_foco"):
             encontrados = [
-                c for c in carregar_caminhoes()
+                c for c in sessao["caminhoes_base"]
                 if c.get("ativo", True) and c.get("tracao") == tracao
             ]
 
@@ -1206,6 +1252,20 @@ def webhook():
         historico = sessao["historico"]
         historico.append({"role": "user", "content": texto})
 
+
+        # 🔒 GPT NUNCA DECIDE DISPONIBILIDADE
+        if (
+            "tem" in texto.lower()
+            and "caminhão" in texto.lower()
+            and not sessao.get("caminhao_em_foco")
+        ):
+            enviar_mensagem(
+                numero,
+                "Tem sim, patrão. Me diz qual modelo você tá procurando que eu te falo certinho."
+            )
+            return "OK", 200
+
+
         resposta = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=historico,
@@ -1220,7 +1280,11 @@ def webhook():
 
         # 🔒 FIXA CAMINHÃO SE O GPT CONFIRMOU UM MODELO
         if not sessao.get("caminhao_em_foco"):
-            caminhao_do_gpt = detectar_caminhao_no_texto(mensagem)
+            caminhao_do_gpt = detectar_caminhao_no_texto(
+                mensagem,
+                sessao["caminhoes_base"]
+            )
+
         if caminhao_do_gpt:
             sessao["caminhao_em_foco"] = caminhao_do_gpt
 
@@ -1235,9 +1299,23 @@ def webhook():
         sessao["resumo_para_gabriel"].append(f"Ronaldo: {mensagem}")
         historico.append({"role": "assistant", "content": mensagem})
 
-        for msg in quebrar_em_mensagens(mensagem):
+        # ==============================
+        # 9. ENVIO CONTROLADO DE RESPOSTA
+        # ==============================
+
+        mensagens = quebrar_em_mensagens(mensagem)
+
+        # 🔒 REGRA: na primeira resposta, pode mandar até 2 mensagens
+        # depois disso, sempre só 1 mensagem
+        limite = 2 if sessao["primeira_resposta"] else 1
+
+        for msg in mensagens[:limite]:
             enviar_mensagem(numero, msg)
             time.sleep(1)
+
+        # 🔒 Após a primeira resposta, desativa definitivamente
+        sessao["primeira_resposta"] = False
+
 
     except Exception as e:
         import traceback
