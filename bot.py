@@ -1159,8 +1159,13 @@ def webhook():
             sessao["aguardando_nome_para_transferencia"] = False
             sessao["pausado_para_gabriel"] = True
             sessao["pausado_desde"] = datetime.now()
+
+            # limpa histórico pra não gerar novas respostas
+            sessao["historico"] = [{"role": "system", "content": SYSTEM_PROMPT}]
+
             avisar_gabriel(numero, sessao)
             return "OK", 200
+
 
         # ==============================
         # 5. DETECTA CAMINHÃO ESPECÍFICO
