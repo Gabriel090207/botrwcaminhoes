@@ -1057,6 +1057,7 @@ def atualizar_base_caminhoes_seguranca(sessao):
         print("Erro ao atualizar base de caminhões:", e)
 
 
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.json
@@ -1095,8 +1096,6 @@ def webhook():
             }
 
         sessao = SESSOES[numero]
-
-        # 🔄 Atualiza base de caminhões se estiver seguro
         atualizar_base_caminhoes_seguranca(sessao)
 
         if sessao["pausado_para_gabriel"]:
@@ -1106,7 +1105,7 @@ def webhook():
             sessao["mensagens_processadas"].add(message_id)
 
         # ==============================
-        # 3. EXTRAI TEXTO / ÁUDIO
+        # 3. TEXTO / ÁUDIO
         # ==============================
         texto = (
             data.get("text", {}).get("message")
@@ -1114,58 +1113,32 @@ def webhook():
             else data.get("text")
         ) or data.get("body") or data.get("message") or data.get("caption")
 
-        if not texto and data.get("audio"):
-            try:
-                audio_url = data["audio"].get("audioUrl")
-                audio_path = f"/tmp/{message_id}.ogg"
-                r = requests.get(audio_url, timeout=10)
-                with open(audio_path, "wb") as f:
-                    f.write(r.content)
-                texto = transcrever_audio(audio_path)
-            except:
-                pass
-
         if not texto:
             return "OK", 200
 
         print(f">> Cliente {numero}: {texto}")
         sessao["resumo_para_gabriel"].append(f"Cliente: {texto}")
 
-        # ==============================
-        # 3.1 LIMPA FOCO EM PERGUNTA GENÉRICA
-        # ==============================
-        PERGUNTAS_GENERICAS = [
-            "tem caminhão",
-            "tem caminhao",
-            "o que tem",
-            "quais tem",
-            "disponível",
-            "disponiveis",
-            "tem mais"
-        ]
-
-        if any(p in texto.lower() for p in PERGUNTAS_GENERICAS):
-            sessao["caminhao_em_foco"] = None
+        texto_lower = texto.lower()
 
         # ==============================
-        # 4. RECEBE NOME (TRANSFERÊNCIA)
+        # 4. RECEBE NOME
         # ==============================
         if sessao["aguardando_nome_para_transferencia"]:
             nome = texto.strip().split()[0].capitalize()
 
             enviar_mensagem(
                 numero,
-                f"Valeu, {nome}! 👍 Em breve o Gabriel vai entrar em contato contigo pra alinhar tudo certinho."
+                f"Valeu, {nome}! 👍 O Gabriel vai entrar em contato contigo pra alinhar certinho."
             )
 
             sessao["aguardando_nome_para_transferencia"] = False
             sessao["pausado_para_gabriel"] = True
-
             avisar_gabriel(numero, sessao)
             return "OK", 200
 
         # ==============================
-        # 5. DETECTA CAMINHÃO PELO TEXTO (PRIORIDADE TOTAL)
+        # 5. DETECTA CAMINHÃO ESPECÍFICO
         # ==============================
         caminhao_detectado = detectar_caminhao_no_texto(
             texto,
@@ -1176,8 +1149,37 @@ def webhook():
             sessao["caminhao_em_foco"] = caminhao_detectado
 
         # ==============================
-        # 6. DETECTA TRAÇÃO
-        # ⚠️ SOMENTE SE NÃO HOUVER CAMINHÃO DEFINIDO
+        # 6. BUSCA GENÉRICA POR MODELO (EX: "tem daf 510?")
+        # ==============================
+        if (
+            "daf" in texto_lower
+            and "510" in texto_lower
+            and not sessao.get("caminhao_em_foco")
+        ):
+            encontrados = [
+                c for c in sessao["caminhoes_base"]
+                if c.get("ativo", True)
+                and "510" in (c.get("modelo") or "")
+            ]
+
+            if encontrados:
+                nomes = [
+                    f"{c.get('marca')} {c.get('modelo')} {c.get('ano')} {c.get('tracao')}"
+                    for c in encontrados
+                ]
+
+                enviar_mensagem(
+                    numero,
+                    "Tem sim, patrão. No momento tenho: " + ", ".join(nomes)
+                )
+
+                if len(encontrados) == 1:
+                    sessao["caminhao_em_foco"] = encontrados[0]
+
+                return "OK", 200
+
+        # ==============================
+        # 7. TRAÇÃO (SÓ SE NÃO HOUVER FOCO)
         # ==============================
         tracao = detectar_tracao_pedida(texto)
 
@@ -1211,7 +1213,7 @@ def webhook():
             return "OK", 200
 
         # ==============================
-        # 7. PEDIDO DE FOTO / VÍDEO
+        # 8. FOTO / VÍDEO
         # ==============================
         if detectar_pedido_foto(texto):
             caminhao = sessao.get("caminhao_em_foco")
@@ -1221,21 +1223,10 @@ def webhook():
                 enviar_mensagem(numero, "Com certeza, patrão. Já te mando.")
                 if imagens:
                     enviar_imagens_caminhao(numero, imagens, limite=20)
-                else:
-                    enviar_mensagem(
-                        numero,
-                        "Patrão, esse caminhão ainda não tem fotos cadastradas."
-                    )
                 return "OK", 200
 
-            enviar_mensagem(
-                numero,
-                "Consigo sim, patrão. Qual caminhão você quer ver?"
-            )
-            return "OK", 200
-
         # ==============================
-        # 8. GPT (CONVERSA NORMAL)
+        # 9. GPT (SÓ TEXTO, SEM DECIDIR DISPONIBILIDADE)
         # ==============================
         historico = sessao["historico"]
         historico.append({"role": "user", "content": texto})
@@ -1266,7 +1257,6 @@ def webhook():
         traceback.print_exc()
 
     return "OK", 200
-
 
 
 
