@@ -1052,24 +1052,7 @@ def webhook():
         print(f">> Cliente {numero}: {texto}")
 
 
-        # ==============================
-        # PERGUNTA SOBRE CONJUNTO
-        # ==============================
-        if any(p in texto_lower for p in ["conjunto", "carreta", "cavalo com carreta"]):
-            enviar_mensagem(
-                numero,
-                "Camarada, no momento tô mais focado nos caminhões. "
-                "Mas posso ir vendo se aparece algum conjunto."
-            )
-
-            enviar_mensagem(
-                numero,
-                "Vou te mandar o link do meu grupo pra acompanhar:\n"
-                "https://chat.whatsapp.com/F69FL3ligTJGPRAJfKsQaW?mode=gi_t"
-            )
-
-            return "OK", 200
-
+        
 
 
         # ==============================
