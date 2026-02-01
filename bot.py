@@ -1434,6 +1434,11 @@ def webhook():
             enviar_mensagem(numero, msg)
             time.sleep(1)
 
+        # Se mencionar grupo, envia o link
+        if "grupo" in mensagem.lower():
+            enviar_mensagem(numero, GRUPO_LINK)
+
+
         sessao["primeira_resposta"] = False
 
     except Exception as e:
