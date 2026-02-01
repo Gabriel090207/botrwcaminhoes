@@ -1049,17 +1049,10 @@ def detectar_tracao_pedida(texto: str):
 
 
 def atualizar_base_caminhoes_seguranca(sessao):
-    """
-    Atualiza a base de caminhões SOMENTE se não houver caminhão em foco.
-    Evita confusão durante a conversa.
-    """
-    if sessao.get("caminhao_em_foco"):
-        return
-
     try:
         sessao["caminhoes_base"] = carregar_caminhoes()
     except Exception as e:
-        print("Erro ao atualizar base de caminhões:", e)
+        print("Erro ao atualizar base:", e)
 
 
 
@@ -1417,6 +1410,19 @@ def webhook():
 
 
         mensagem = limpar_resposta_whatsapp(resposta.choices[0].message.content)
+
+
+        # evita resposta vazia ou só saudação
+        if len(mensagem.split()) <= 3:
+            caminhao = sessao.get("caminhao_em_foco")
+            if caminhao:
+                km = extrair_km_do_resumo(caminhao) or "Não informado"
+
+                mensagem = (
+                    f"{caminhao.get('marca')} {caminhao.get('modelo')} "
+                    f"{caminhao.get('ano')} com {km}, caminhão bem alinhado "
+                    f"e é repasse direto."
+                )
 
         sessao["resumo_para_gabriel"].append(f"Ronaldo: {mensagem}")
         historico.append({"role": "assistant", "content": mensagem})
