@@ -1281,6 +1281,52 @@ def webhook():
                 print("Falha ao enviar imagens")
 
             return "OK", 200
+        
+
+        # ==============================
+        # LISTAR CAMINHÕES DISPONÍVEIS
+        # ==============================
+        PERGUNTA_LISTA = [
+            "o que tem",
+            "o que você tem",
+            "o que vc tem",
+            "tem o que",
+            "tem quais",
+            "quais caminhões",
+            "quais caminhoes",
+            "o que tem de bom",
+            "o que tem disponível",
+            "o que tem disponivel"
+        ]     
+
+        if any(frase in texto_lower for frase in PERGUNTA_LISTA):
+            encontrados = [
+                c for c in sessao["caminhoes_base"]
+                if c.get("ativo", True)
+            ]
+
+            if encontrados:
+                nomes = [
+                    f"{c.get('marca')} {c.get('modelo')} {c.get('ano')} {c.get('tracao')}"
+                    for c in encontrados
+                ]
+
+                if sessao["primeira_resposta"]:
+                    enviar_mensagem(
+                        numero,
+                        "Ôpa! Aqui é o Ronaldo, da RW Caminhões. No momento tenho: " + ", ".join(nomes)
+                    )
+                    sessao["primeira_resposta"] = False
+                else:
+                    enviar_mensagem(
+                    numero,
+                    "No momento tenho: " + ", ".join(nomes)
+                )
+
+                if len(encontrados) == 1:
+                    sessao["caminhao_em_foco"] = encontrados[0]
+
+                return "OK", 200
 
 
         # ==============================
@@ -1288,15 +1334,10 @@ def webhook():
         # ==============================
         historico = sessao["historico"]
 
-        # injeta caminhão real no contexto
         caminhao = sessao.get("caminhao_em_foco")
 
-
-        km = extrair_km_do_resumo(caminhao) or "Não informado"
-
         if caminhao:
-
-      
+            km = extrair_km_do_resumo(caminhao) or "Não informado"
 
             contexto_real = f"""
         DADOS REAIS DO CAMINHÃO EM FOCO (BANCO):
@@ -1318,13 +1359,14 @@ def webhook():
                 "content": contexto_real
             })
 
-            historico.append({"role": "user", "content": texto})
+        historico.append({"role": "user", "content": texto})
 
-            resposta = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=historico,
-                temperature=0.2
-            )
+        resposta = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=historico,
+            temperature=0.2
+        )
+
 
         mensagem = limpar_resposta_whatsapp(resposta.choices[0].message.content)
 
