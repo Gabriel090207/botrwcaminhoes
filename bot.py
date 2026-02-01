@@ -1143,6 +1143,46 @@ def webhook():
         sessao["resumo_para_gabriel"].append(f"Cliente: {texto}")
 
         texto_lower = texto.lower()
+
+        # ==============================
+        # LISTAR CAMINHÕES QUANDO CLIENTE PERGUNTA O QUE TEM
+        # ==============================
+        if any(frase in texto_lower for frase in [
+            "o que tem",
+            "o que tu tem",
+            "o que vocês tem",
+            "o que tem de bom",
+            "tem o que",
+            "quais caminhões",
+            "tem caminhão",
+            "o que tem disponível"
+        ]):
+            encontrados = [
+                c for c in sessao["caminhoes_base"]
+                if c.get("ativo", True)
+            ]
+
+            if encontrados:
+                nomes = [
+                    f"{c.get('marca')} {c.get('modelo')} {c.get('ano')} {c.get('tracao')}"
+                    for c in encontrados
+                ]
+
+                if sessao["primeira_resposta"]:
+                    enviar_mensagem(
+                        numero,
+                        "Ôpa! Aqui é o Ronaldo, da RW Caminhões. No momento tenho: " + ", ".join(nomes)
+                    )
+                    sessao["primeira_resposta"] = False
+                else:
+                    enviar_mensagem(
+                        numero,
+                        "No momento tenho: " + ", ".join(nomes)
+                    )
+
+                return "OK", 200
+
+
         
 
         # ==============================
@@ -1350,8 +1390,16 @@ def webhook():
         Observação: {caminhao.get("observacao")}
 
         REGRA:
-        Use somente esses dados.
-        Nunca invente valor ou características.
+        Quando o cliente pedir para falar mais sobre o caminhão,
+        responda trazendo:
+        - modelo
+        - ano
+        - km
+        - condição geral
+        - que é repasse
+        em mensagem curta e natural.
+
+        Nunca responder só repetindo o modelo.
         """
 
             historico.append({
