@@ -1276,30 +1276,34 @@ def webhook():
         # ==============================
         # CLIENTE PEDIU OUTRA OPÇÃO DE MARCA
         # ==============================
-        if "daf" in texto_lower and any(p in texto_lower for p in [
+        if marca_detectada and any(p in texto_lower for p in [
             "outro", "outra", "mais", "tem mais", "outra opção", "outra opcao"
         ]):
+
             encontrados = [
                 c for c in sessao["caminhoes_base"]
                 if c.get("ativo", True)
-                and "daf" in (c.get("marca") or "").lower()
-        ]
-
-        if encontrados:
-            nomes = [
-                f"{c.get('marca')} {c.get('modelo')} {c.get('ano')} {c.get('tracao')}"
-                for c in encontrados
+                 and marca_detectada in (c.get("marca") or "").lower()
             ]
 
-            enviar_mensagem(
-                numero,
-                "Tenho sim, patrão. Hoje tenho: " + ", ".join(nomes)
-            )
-        else:
-            enviar_mensagem(
-                numero,
-                "No momento não tenho outro DAF disponível, patrão."
-            )
+            if encontrados:
+                nomes = [
+                    f"{c.get('marca')} {c.get('modelo')} {c.get('ano')} {c.get('tracao')}"
+                    for c in encontrados
+                ]
+
+                enviar_mensagem(
+                    numero,
+                    "Tenho sim, patrão. Hoje tenho: " + ", ".join(nomes)
+                )
+
+                if len(encontrados) == 1:
+                    sessao["caminhao_em_foco"] = encontrados[0]
+            else:
+                enviar_mensagem(
+                    numero,
+                    f"No momento não tenho outro {marca_detectada.upper()} disponível, patrão."
+                )
 
             sessao["primeira_resposta"] = False
             return "OK", 200
