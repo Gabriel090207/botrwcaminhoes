@@ -1222,6 +1222,57 @@ def webhook():
 
         texto_lower = texto.lower()
 
+
+        # ==============================
+        # BUSCA POR MARCA (GENÉRICO)
+        # ==============================
+        marcas_base = set()
+
+        for c in sessao["caminhoes_base"]:
+            marca = (c.get("marca") or "").lower()
+            if marca:
+                marcas_base.add(marca)
+
+        marca_detectada = None
+
+        for marca in marcas_base:
+            if marca in texto_lower:
+                marca_detectada = marca
+                break
+
+        if marca_detectada and any(p in texto_lower for p in [
+            "tem", "tem de", "tem algum", "tem alguma",
+            "o que tem", "quais", "disponível", "disponivel"
+        ]):
+            encontrados = [
+                c for c in sessao["caminhoes_base"]
+                if c.get("ativo", True)
+                and marca_detectada in (c.get("marca") or "").lower()
+            ]
+
+            if encontrados:
+                nomes = [
+                    f"{c.get('marca')} {c.get('modelo')} {c.get('ano')} {c.get('tracao')}"
+                    for c in encontrados
+                ]
+
+                resposta = "Tenho sim, patrão. Hoje tenho: " + ", ".join(nomes)
+
+                enviar_mensagem(numero, resposta)
+
+                if len(encontrados) == 1:
+                    sessao["caminhao_em_foco"] = encontrados[0]
+
+            else:
+                enviar_mensagem(
+                    numero,
+                    f"No momento não tenho {marca_detectada.upper()} disponível, patrão."
+                )
+
+            sessao["primeira_resposta"] = False
+            return "OK", 200
+
+
         # ==============================
         # CLIENTE PEDIU OUTRA OPÇÃO DE MARCA
         # ==============================
@@ -1364,7 +1415,7 @@ def webhook():
                 return "OK", 200
 
         # ==============================
-        # 7. TRAÇÃO (SÓ SE NÃO HOUVER FOCO)
+        # 7. TRAÇÃO
         # ==============================
         tracao = detectar_tracao_pedida(texto)
 
@@ -1387,7 +1438,6 @@ def webhook():
 
                 if len(encontrados) == 1:
                     sessao["caminhao_em_foco"] = encontrados[0]
-
             else:
                 enviar_mensagem(
                     numero,
@@ -1395,7 +1445,9 @@ def webhook():
                     "Mas sempre entra coisa boa."
                 )
 
+            sessao["primeira_resposta"] = False
             return "OK", 200
+
 
         # ==============================
         # FOTO / VÍDEO
