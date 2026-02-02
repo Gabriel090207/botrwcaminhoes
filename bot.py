@@ -1056,6 +1056,91 @@ def atualizar_base_caminhoes_seguranca(sessao):
 
 
 
+def buscar_mensagens_pendentes():
+    headers = {
+        "Client-Token": CLIENT_TOKEN
+    }
+
+    try:
+        url_chats = f"https://api.z-api.io/instances/{INSTANCE_ID}/token/{INSTANCE_TOKEN}/chats"
+        resp = requests.get(url_chats, headers=headers, timeout=10)
+
+        chats = resp.json()
+
+        for chat in chats:
+            numero = chat.get("phone")
+
+            if not numero:
+                continue
+
+            url_msgs = f"https://api.z-api.io/instances/{INSTANCE_ID}/token/{INSTANCE_TOKEN}/messages/{numero}?page=1&pageSize=5"
+            resp_msgs = requests.get(url_msgs, headers=headers, timeout=10)
+
+            mensagens = resp_msgs.json()
+
+            for msg in mensagens:
+                if msg.get("fromMe"):
+                    continue
+
+                message_id = msg.get("id")
+
+                sessao = SESSOES.get(numero)
+                if not sessao:
+                    continue
+
+                processadas = sessao.get("mensagens_processadas", set())
+                if message_id in processadas:
+                    continue
+
+                # ======================
+                # TEXTO NORMAL
+                # ======================
+                texto = msg.get("text", {}).get("message") or msg.get("body")
+
+                # ======================
+                # ÁUDIO
+                # ======================
+                if not texto and msg.get("audio"):
+                    audio_url = msg["audio"].get("url")
+
+                    if audio_url:
+                        caminho_audio = f"/tmp/{message_id}.ogg"
+
+                        audio_resp = requests.get(audio_url, timeout=10)
+                        with open(caminho_audio, "wb") as f:
+                            f.write(audio_resp.content)
+
+                        texto = transcrever_audio(caminho_audio)
+
+                        try:
+                            os.remove(caminho_audio)
+                        except:
+                            pass
+
+                if not texto:
+                    continue
+
+                print("Mensagem recuperada:", texto)
+
+                fake_data = {
+                    "phone": numero,
+                    "text": texto,
+                    "messageId": message_id
+                }
+
+                with app.test_request_context(
+                    "/webhook",
+                    method="POST",
+                    json=fake_data
+                ):
+                    webhook()
+
+        print("Verificação de mensagens pendentes finalizada.")
+
+    except Exception as e:
+        print("Erro ao buscar mensagens pendentes:", e)
+
+   
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.json
@@ -1136,6 +1221,38 @@ def webhook():
         sessao["resumo_para_gabriel"].append(f"Cliente: {texto}")
 
         texto_lower = texto.lower()
+
+        # ==============================
+        # CLIENTE PEDIU OUTRA OPÇÃO DE MARCA
+        # ==============================
+        if "daf" in texto_lower and any(p in texto_lower for p in [
+            "outro", "outra", "mais", "tem mais", "outra opção", "outra opcao"
+        ]):
+            encontrados = [
+                c for c in sessao["caminhoes_base"]
+                if c.get("ativo", True)
+                and "daf" in (c.get("marca") or "").lower()
+        ]
+
+        if encontrados:
+            nomes = [
+                f"{c.get('marca')} {c.get('modelo')} {c.get('ano')} {c.get('tracao')}"
+                for c in encontrados
+            ]
+
+            enviar_mensagem(
+                numero,
+                "Tenho sim, patrão. Hoje tenho: " + ", ".join(nomes)
+            )
+        else:
+            enviar_mensagem(
+                numero,
+                "No momento não tenho outro DAF disponível, patrão."
+            )
+
+            sessao["primeira_resposta"] = False
+            return "OK", 200
+
 
         # ==============================
         # LISTAR CAMINHÕES QUANDO CLIENTE PERGUNTA O QUE TEM
@@ -1251,7 +1368,7 @@ def webhook():
         # ==============================
         tracao = detectar_tracao_pedida(texto)
 
-        if tracao and not sessao.get("caminhao_em_foco"):
+        if tracao:
             encontrados = [
                 c for c in sessao["caminhoes_base"]
                 if c.get("ativo", True) and c.get("tracao") == tracao
@@ -1450,11 +1567,21 @@ def webhook():
 
 
 
-
 if __name__ == "__main__":
     print("Bot RW Caminhões iniciado (modo servidor)")
+
+    import threading
+
+    def loop_busca_pendentes():
+        while True:
+            buscar_mensagens_pendentes()
+            time.sleep(600)  # verifica a cada 1 hora
+
+    # inicia verificação em background
+    threading.Thread(target=loop_busca_pendentes, daemon=True).start()
 
     app.run(
         host="0.0.0.0",
         port=int(os.environ.get("PORT", 10000))
     )
+
