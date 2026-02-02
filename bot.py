@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 from caminhoes import CAMINHOES_DISPONIVEIS
 from firebase_caminhoes import carregar_caminhoes
 from firebase_service import carregar_prompt
+from firebase_service import db
+
 from datetime import datetime, timedelta
 import requests
 from dashboard_routes import register_dashboard_routes
@@ -1048,6 +1050,40 @@ def detectar_tracao_pedida(texto: str):
     return None
 
 
+def salvar_sessao(numero, sessao):
+    try:
+        dados = dict(sessao)
+
+        # sets não salvam no firebase
+        dados["mensagens_processadas"] = list(
+            sessao.get("mensagens_processadas", [])
+        )
+
+        db.collection("sessoes").document(numero).set(dados)
+
+    except Exception as e:
+        print("Erro ao salvar sessão:", e)
+
+
+def carregar_sessao(numero):
+    try:
+        doc = db.collection("sessoes").document(numero).get()
+
+        if not doc.exists:
+            return None
+
+        dados = doc.to_dict()
+
+        dados["mensagens_processadas"] = set(
+            dados.get("mensagens_processadas", [])
+        )
+
+        return dados
+
+    except Exception as e:
+        print("Erro ao carregar sessão:", e)
+        return None
+
 def atualizar_base_caminhoes_seguranca(sessao):
     try:
         sessao["caminhoes_base"] = carregar_caminhoes()
@@ -1066,6 +1102,11 @@ def buscar_mensagens_pendentes():
         resp = requests.get(url_chats, headers=headers, timeout=10)
 
         chats = resp.json()
+
+        if not isinstance(chats, list):
+            print("Resposta inválida ao buscar chats:", chats)
+            return
+
 
         for chat in chats:
             numero = chat.get("phone")
@@ -1171,20 +1212,39 @@ def webhook():
         # ==============================
         # 2. GARANTE SESSÃO
         # ==============================
+        sessao = SESSOES.get(numero)
+
         if numero not in SESSOES:
-            SESSOES[numero] = {
-                "caminhao_em_foco": None,
-                "caminhoes_base": carregar_caminhoes(),
-                "historico": [{"role": "system", "content": SYSTEM_PROMPT}],
-                "primeira_resposta": True,
-                "pausado_para_gabriel": False,
-                "aguardando_nome_para_transferencia": False,
-                "resumo_para_gabriel": [],
-                "mensagens_processadas": set(),
-            }
+            sessao_salva = carregar_sessao(numero)
+
+            if sessao_salva:
+                SESSOES[numero] = sessao_salva
+                print("Sessão recuperada do Firebase:", numero)
+
+            else:
+                SESSOES[numero] = {
+                    "caminhao_em_foco": None,
+                    "caminhoes_base": carregar_caminhoes(),
+                    "historico": [{"role": "system", "content": SYSTEM_PROMPT}],
+                    "primeira_resposta": True,
+                    "pausado_para_gabriel": False,
+                    "aguardando_nome_para_transferencia": False,
+                    "resumo_para_gabriel": [],
+                    "mensagens_processadas": set(),
+                }
+
 
         sessao = SESSOES[numero]
+
         atualizar_base_caminhoes_seguranca(sessao)
+
+        # restaura caminhão em foco se existir
+        if not sessao.get("caminhao_em_foco") and sessao.get("caminhao_em_foco_id"):
+            for c in sessao["caminhoes_base"]:
+                if c.get("id") == sessao["caminhao_em_foco_id"]:
+                    sessao["caminhao_em_foco"] = c
+                    break
+
 
 
         if sessao["pausado_para_gabriel"]:
@@ -1209,8 +1269,30 @@ def webhook():
             else data.get("text")
         ) or data.get("body") or data.get("message") or data.get("caption")
 
+        # ======================
+        # ÁUDIO
+        # ======================
+        if not texto and data.get("audio"):
+            audio_url = data["audio"].get("url")
+
+            if audio_url:
+                caminho_audio = f"/tmp/{message_id}.ogg"
+
+                audio_resp = requests.get(audio_url, timeout=10)
+                with open(caminho_audio, "wb") as f:
+                    f.write(audio_resp.content)
+
+                texto = transcrever_audio(caminho_audio)
+
+            try:
+                os.remove(caminho_audio)
+            except:
+                pass
+
+        # se ainda não tiver texto, ignora
         if not texto:
             return "OK", 200
+
         
 
         if sessao["pausado_para_gabriel"]:
@@ -1283,7 +1365,7 @@ def webhook():
             encontrados = [
                 c for c in sessao["caminhoes_base"]
                 if c.get("ativo", True)
-                 and marca_detectada in (c.get("marca") or "").lower()
+                and marca_detectada in (c.get("marca") or "").lower()
             ]
 
             if encontrados:
@@ -1292,13 +1374,20 @@ def webhook():
                     for c in encontrados
                 ]
 
-                enviar_mensagem(
-                    numero,
-                    "Tenho sim, patrão. Hoje tenho: " + ", ".join(nomes)
-                )
+                if sessao["primeira_resposta"]:
+                    enviar_mensagem(
+                        numero,
+                        "Ôpa! Aqui é o Ronaldo, da RW Caminhões. Tenho sim, patrão. Hoje tenho: " + ", ".join(nomes)
+                    )
+                else:
+                    enviar_mensagem(
+                        numero,
+                        "Tenho sim, patrão. Hoje tenho: " + ", ".join(nomes)
+                    )
 
                 if len(encontrados) == 1:
                     sessao["caminhao_em_foco"] = encontrados[0]
+
             else:
                 enviar_mensagem(
                     numero,
@@ -1387,6 +1476,8 @@ def webhook():
                 print("DEBUG: Caminhão em foco alterado para:",
                     caminhao_detectado.get("modelo"))
                 sessao["caminhao_em_foco"] = caminhao_detectado
+                sessao["caminhao_em_foco_id"] = caminhao_detectado.get("id")
+
 
         # ==============================
         # 6. BUSCA GENÉRICA POR MODELO (EX: "tem daf 510?")
@@ -1600,6 +1691,11 @@ def webhook():
         sessao["resumo_para_gabriel"].append(f"Ronaldo: {mensagem}")
         historico.append({"role": "assistant", "content": mensagem})
 
+
+        # mantém só últimas 20 mensagens para não pesar
+        if len(historico) > 20:
+            sessao["historico"] = [historico[0]] + historico[-19:]
+
         mensagens = quebrar_em_mensagens(mensagem)
         limite = 2 if sessao["primeira_resposta"] else 1
 
@@ -1613,6 +1709,8 @@ def webhook():
 
 
         sessao["primeira_resposta"] = False
+        salvar_sessao(numero, sessao)
+
 
     except Exception as e:
         import traceback
